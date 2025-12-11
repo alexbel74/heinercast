@@ -135,22 +135,26 @@ let voices = [];
 
 async function loadProject() {
     try {
-        const response = await api.get(`/api/projects/${projectId}`);
-        project = await response.json();
-        renderProject();
-        loadVoices();
+        const result = await api.get(`/api/projects/${projectId}`);
+        if (result.ok && result.data) {
+            project = result.data;
+            renderProject();
+            loadVoices();
+        }
     } catch (error) {
-        showToast('Failed to load project', 'error');
+        showError(error, 'Load project');
     }
 }
 
 async function loadVoices() {
     try {
-        const response = await api.get('/api/voices');
-        voices = await response.json();
-        updateVoiceSelect();
+        const result = await api.get('/api/voices');
+        if (result.ok && result.data) {
+            voices = Array.isArray(result.data) ? result.data : (result.data.items || []);
+            updateVoiceSelect();
+        }
     } catch (error) {
-        console.error('Failed to load voices');
+        console.error('Failed to load voices', error);
     }
 }
 
@@ -203,12 +207,16 @@ function renderProject() {
 
 async function loadEpisodes() {
     try {
-        const response = await api.get(`/api/projects/${projectId}/episodes`);
-        const data = await response.json();
+        const result = await api.get(`/api/projects/${projectId}/episodes`);
         
+        if (!result.ok || !result.data) return;
+        
+        const data = result.data;
         const epList = document.getElementById('episodes-list');
-        if (data.items.length > 0) {
-            epList.innerHTML = data.items.map(ep => `
+        const items = data.items || [];
+        
+        if (items.length > 0) {
+            epList.innerHTML = items.map(ep => `
                 <a href="/episodes/${ep.id}" class="episode-card">
                     <div class="episode-header">
                         <span class="episode-number">#${ep.episode_number}</span>
@@ -232,7 +240,7 @@ async function loadEpisodes() {
             epList.innerHTML = '<p class="empty-text">No episodes yet. Create your first episode to start generating content.</p>';
         }
     } catch (error) {
-        showToast('Failed to load episodes', 'error');
+        showError(error, 'Load episodes');
     }
 }
 
@@ -255,17 +263,15 @@ async function addCharacter(event) {
     };
     
     try {
-        const response = await api.post(`/api/projects/${projectId}/characters`, data);
-        if (response.ok) {
+        const result = await api.post(`/api/projects/${projectId}/characters`, data);
+        if (result.ok) {
             showToast('Character added!', 'success');
             closeModal('add-character-modal');
             loadProject();
-        } else {
-            const error = await response.json();
-            showToast(error.message || 'Failed to add character', 'error');
         }
+        // Error already shown by handleResponse
     } catch (error) {
-        showToast('Network error', 'error');
+        showError(error, 'Add character');
     }
 }
 
@@ -273,13 +279,13 @@ async function deleteCharacter(charId) {
     if (!confirm('Remove this character?')) return;
     
     try {
-        const response = await api.delete(`/api/projects/${projectId}/characters/${charId}`);
-        if (response.ok) {
+        const result = await api.delete(`/api/projects/${projectId}/characters/${charId}`);
+        if (result.ok) {
             showToast('Character removed', 'success');
             loadProject();
         }
     } catch (error) {
-        showToast('Failed to remove character', 'error');
+        showError(error, 'Remove character');
     }
 }
 
@@ -304,18 +310,15 @@ async function createEpisode(event) {
     };
     
     try {
-        const response = await api.post(`/api/projects/${projectId}/episodes`, data);
-        if (response.ok) {
-            const episode = await response.json();
+        const result = await api.post(`/api/projects/${projectId}/episodes`, data);
+        if (result.ok && result.data) {
             showToast('Episode created!', 'success');
             closeModal('create-episode-modal');
-            window.location.href = `/episodes/${episode.id}`;
-        } else {
-            const error = await response.json();
-            showToast(error.message || 'Failed to create episode', 'error');
+            window.location.href = `/episodes/${result.data.id}`;
         }
+        // Error already shown by handleResponse
     } catch (error) {
-        showToast('Network error', 'error');
+        showError(error, 'Create episode');
     }
 }
 
@@ -323,13 +326,13 @@ async function confirmDeleteProject() {
     if (!confirm('Delete this project and all its episodes? This cannot be undone.')) return;
     
     try {
-        const response = await api.delete(`/api/projects/${projectId}`);
-        if (response.ok) {
+        const result = await api.delete(`/api/projects/${projectId}`);
+        if (result.ok) {
             showToast('Project deleted', 'success');
             window.location.href = '/dashboard';
         }
     } catch (error) {
-        showToast('Failed to delete project', 'error');
+        showError(error, 'Delete project');
     }
 }
 
