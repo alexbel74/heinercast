@@ -104,6 +104,11 @@ const translations = {
         'error.elevenlabs': 'Ошибка ElevenLabs',
         'error.llm': 'Ошибка генерации текста',
         'error.unknown': 'Неизвестная ошибка',
+        'error.forbidden': 'Доступ запрещён',
+        'error.not_found': 'Не найдено',
+        'error.rate_limit': 'Превышен лимит запросов. Подождите.',
+        'error.server': 'Ошибка сервера',
+        'error.timeout': 'Превышено время ожидания',
         
         // Common
         'common.save': 'Сохранить',
@@ -215,6 +220,11 @@ const translations = {
         'error.elevenlabs': 'ElevenLabs error',
         'error.llm': 'Text generation error',
         'error.unknown': 'Unknown error',
+        'error.forbidden': 'Access denied',
+        'error.not_found': 'Not found',
+        'error.rate_limit': 'Rate limit exceeded. Please wait.',
+        'error.server': 'Server error',
+        'error.timeout': 'Request timeout',
         
         // Common
         'common.save': 'Save',
@@ -326,6 +336,11 @@ const translations = {
         'error.elevenlabs': 'ElevenLabs-Fehler',
         'error.llm': 'Textgenerierungsfehler',
         'error.unknown': 'Unbekannter Fehler',
+        'error.forbidden': 'Zugriff verweigert',
+        'error.not_found': 'Nicht gefunden',
+        'error.rate_limit': 'Ratenlimit überschritten. Bitte warten.',
+        'error.server': 'Serverfehler',
+        'error.timeout': 'Zeitüberschreitung der Anfrage',
         
         // Common
         'common.save': 'Speichern',
@@ -337,8 +352,28 @@ const translations = {
     }
 };
 
-// Current language
-let currentLang = localStorage.getItem('language') || 'en';
+// Current language - initialize from multiple sources
+let currentLang = (function() {
+    // Priority: localStorage > cookie > html lang attribute > default
+    const fromStorage = localStorage.getItem('language');
+    if (fromStorage && translations[fromStorage]) {
+        return fromStorage;
+    }
+    
+    const fromCookie = document.cookie.split('; ')
+        .find(row => row.startsWith('language='))
+        ?.split('=')[1];
+    if (fromCookie && translations[fromCookie]) {
+        return fromCookie;
+    }
+    
+    const htmlLang = document.documentElement.lang;
+    if (htmlLang && translations[htmlLang]) {
+        return htmlLang;
+    }
+    
+    return 'en';
+})();
 
 /**
  * Get translation by key
@@ -353,11 +388,20 @@ function t(key, fallback = null) {
  */
 function setLanguage(lang) {
     if (!translations[lang]) {
-        console.warn(`Language '${lang}' not supported, using 'en'`);
+        console.warn(`[Translations] Language '${lang}' not supported, using 'en'`);
         lang = 'en';
     }
+    
+    console.log('[Translations] Setting language to:', lang);
     currentLang = lang;
+    
+    // Save to localStorage
     localStorage.setItem('language', lang);
+    
+    // Save to cookie for server-side
+    document.cookie = `language=${lang};path=/;max-age=31536000`;
+    
+    // Apply translations immediately
     applyTranslations();
 }
 
@@ -398,6 +442,9 @@ function applyTranslations() {
         const key = element.getAttribute('data-i18n-title');
         element.title = t(key);
     });
+    
+    // Update html lang attribute
+    document.documentElement.lang = currentLang;
 }
 
 /**
@@ -407,17 +454,15 @@ function formatStatusTranslated(status) {
     return t(`status.${status}`, status);
 }
 
-// Initialize on load
+// Initialize on load - but don't override selector (app.js handles that)
 document.addEventListener('DOMContentLoaded', () => {
-    // Get language from localStorage or default
-    currentLang = localStorage.getItem('language') || 'en';
+    console.log('[Translations] Initializing with language:', currentLang);
+    
+    // Sync localStorage if not set
+    if (!localStorage.getItem('language')) {
+        localStorage.setItem('language', currentLang);
+    }
     
     // Apply translations
     applyTranslations();
-    
-    // Update language selector if exists
-    const langSelect = document.getElementById('language-select');
-    if (langSelect) {
-        langSelect.value = currentLang;
-    }
 });

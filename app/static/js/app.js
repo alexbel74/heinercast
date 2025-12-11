@@ -67,16 +67,60 @@ const api = {
         };
         
         try {
-            const data = await response.json();
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch {
+                data = { message: text || response.statusText };
+            }
+            
             if (response.ok) {
                 result.data = data;
             } else {
                 result.error = data;
-                // Show error toast
-                const message = data.message || data.detail || t('error.unknown');
+                
+                // Build detailed error message
+                let message = data.message || data.detail || data.error;
+                
+                // Handle various error formats
+                if (typeof message === 'object') {
+                    message = JSON.stringify(message);
+                }
+                
+                // Add HTTP status context
+                const statusMessages = {
+                    400: 'Bad request',
+                    401: t('error.auth'),
+                    403: t('error.forbidden') || 'Access denied',
+                    404: t('error.not_found') || 'Not found',
+                    422: 'Validation error',
+                    429: t('error.rate_limit') || 'Rate limit exceeded',
+                    500: t('error.server') || 'Server error',
+                    502: 'Service unavailable',
+                    503: 'Service temporarily unavailable'
+                };
+                
+                if (!message) {
+                    message = statusMessages[response.status] || `Error ${response.status}`;
+                }
+                
+                // Add details if available
+                if (data.details) {
+                    message += `: ${data.details}`;
+                }
+                
                 showToast(message, 'error');
+                
+                // Log full error for debugging
+                console.error('[API Error]', {
+                    status: response.status,
+                    url: response.url,
+                    error: data
+                });
             }
         } catch (e) {
+            console.error('[API Parse Error]', e);
             if (!response.ok) {
                 result.error = { message: t('error.network') };
                 showToast(t('error.network'), 'error');
@@ -196,30 +240,61 @@ async function logout() {
  * Change language and save preference
  */
 async function changeLanguage(lang) {
+    console.log('[Language] Changing to:', lang);
+    
+    // Validate language
+    if (!['en', 'ru', 'de'].includes(lang)) {
+        console.warn('[Language] Invalid language:', lang);
+        lang = 'en';
+    }
+    
     // Save to localStorage immediately
     localStorage.setItem('language', lang);
     
-    // Update translations
+    // Also save to cookie for server-side rendering
+    document.cookie = `language=${lang};path=/;max-age=31536000`;
+    
+    // Update translations immediately (before reload)
     if (typeof setLanguage === 'function') {
         setLanguage(lang);
     }
     
-    // If logged in, save to server
+    // If logged in, save to server (async, don't wait)
     if (api.getToken()) {
-        try {
-            await fetch('/api/users/settings', {
-                method: 'PUT',
-                headers: api.getHeaders(),
-                credentials: 'include',
-                body: JSON.stringify({ language: lang })
-            });
-        } catch (error) {
-            console.error('Failed to save language to server:', error);
-        }
+        fetch('/api/users/settings', {
+            method: 'PUT',
+            headers: api.getHeaders(),
+            credentials: 'include',
+            body: JSON.stringify({ language: lang })
+        }).catch(error => {
+            console.error('[Language] Failed to save to server:', error);
+        });
     }
     
-    // Reload to apply server-side translations
-    window.location.reload();
+    // Small delay to ensure cookie is set, then reload
+    setTimeout(() => {
+        window.location.reload();
+    }, 100);
+}
+
+/**
+ * Get current language
+ */
+function getCurrentLanguage() {
+    // Priority: localStorage > cookie > default
+    const fromStorage = localStorage.getItem('language');
+    if (fromStorage && ['en', 'ru', 'de'].includes(fromStorage)) {
+        return fromStorage;
+    }
+    
+    const fromCookie = document.cookie.split('; ')
+        .find(row => row.startsWith('language='))
+        ?.split('=')[1];
+    if (fromCookie && ['en', 'ru', 'de'].includes(fromCookie)) {
+        return fromCookie;
+    }
+    
+    return 'en';
 }
 
 /**
@@ -228,10 +303,18 @@ async function changeLanguage(lang) {
 function initLanguageSelector() {
     const langSelect = document.getElementById('language-select');
     if (langSelect) {
-        const savedLang = localStorage.getItem('language') || 'en';
-        langSelect.value = savedLang;
+        const currentLang = getCurrentLanguage();
+        langSelect.value = currentLang;
         
-        langSelect.addEventListener('change', (e) => {
+        // Sync localStorage with current value
+        localStorage.setItem('language', currentLang);
+        
+        // Remove any existing listeners to prevent duplicates
+        const newSelect = langSelect.cloneNode(true);
+        langSelect.parentNode.replaceChild(newSelect, langSelect);
+        
+        newSelect.addEventListener('change', (e) => {
+            e.preventDefault();
             changeLanguage(e.target.value);
         });
     }
@@ -240,21 +323,24 @@ function initLanguageSelector() {
 // ==================== Generation Progress ====================
 
 /**
- * Generation progress tracker
+ * Generation progress tracker with detailed step info
  */
 const generationProgress = {
     modal: null,
     progressBar: null,
     statusText: null,
+    detailsText: null,
+    subProgressBar: null,
     currentStep: 0,
     totalSteps: 0,
     
     steps: {
-        script: { label: 'progress.script', percent: 15 },
-        voice: { label: 'progress.voice', percent: 40 },
-        sounds: { label: 'progress.sounds', percent: 20 },
-        music: { label: 'progress.music', percent: 15 },
-        merge: { label: 'progress.merge', percent: 10 }
+        script: { label: 'progress.script', percent: 15, icon: '📝' },
+        voiceover: { label: 'progress.voice', percent: 40, icon: '🎙️' },
+        sounds: { label: 'progress.sounds', percent: 20, icon: '🔊' },
+        music: { label: 'progress.music', percent: 15, icon: '🎵' },
+        merge: { label: 'progress.merge', percent: 10, icon: '🔄' },
+        cover: { label: 'progress.cover', percent: 0, icon: '🎨' }
     },
     
     show() {
@@ -267,8 +353,16 @@ const generationProgress = {
         this.progressBar = document.getElementById('progress-bar');
         this.statusText = document.getElementById('progress-status');
         this.detailsText = document.getElementById('progress-details');
+        this.subProgressBar = document.getElementById('sub-progress-bar');
+        this.stepIcon = document.getElementById('progress-step-icon');
+        
+        // Reset sub-progress
+        if (this.subProgressBar) {
+            this.subProgressBar.style.display = 'none';
+        }
         
         this.modal.classList.add('active');
+        this.progressBar?.classList.remove('error');
         this.setProgress(0, t('progress.starting'));
     },
     
@@ -280,7 +374,7 @@ const generationProgress = {
     
     setProgress(percent, status, details = '') {
         if (this.progressBar) {
-            this.progressBar.style.width = `${percent}%`;
+            this.progressBar.style.width = `${Math.min(100, percent)}%`;
             this.progressBar.setAttribute('data-percent', `${Math.round(percent)}%`);
         }
         if (this.statusText) {
@@ -299,19 +393,85 @@ const generationProgress = {
                 if (key === stepName) break;
                 accumulatedPercent += value.percent;
             }
+            
+            // Update icon
+            if (this.stepIcon) {
+                this.stepIcon.textContent = step.icon;
+            }
+            
             this.setProgress(accumulatedPercent, t(step.label));
+            
+            // Hide sub-progress for non-voiceover steps
+            if (this.subProgressBar && stepName !== 'voiceover') {
+                this.subProgressBar.style.display = 'none';
+            }
         }
+    },
+    
+    /**
+     * Set detailed sub-progress (e.g., "Line 5 of 20")
+     */
+    setSubProgress(current, total, label = '') {
+        if (this.subProgressBar) {
+            this.subProgressBar.style.display = 'block';
+            const subBar = this.subProgressBar.querySelector('.sub-bar');
+            if (subBar) {
+                const percent = total > 0 ? (current / total) * 100 : 0;
+                subBar.style.width = `${percent}%`;
+            }
+        }
+        
+        // Update details text
+        const detailText = label || `${current} / ${total}`;
+        if (this.detailsText) {
+            this.detailsText.textContent = detailText;
+        }
+    },
+    
+    /**
+     * Set voiceover progress with line info
+     */
+    setVoiceoverProgress(currentLine, totalLines) {
+        const basePercent = 15; // After script
+        const voicePercent = 40;
+        const linePercent = totalLines > 0 ? (currentLine / totalLines) * voicePercent : 0;
+        
+        const lang = getCurrentLanguage();
+        let detailText;
+        if (lang === 'ru') {
+            detailText = `Озвучивание реплики ${currentLine} из ${totalLines}`;
+        } else if (lang === 'de') {
+            detailText = `Vertone Zeile ${currentLine} von ${totalLines}`;
+        } else {
+            detailText = `Voicing line ${currentLine} of ${totalLines}`;
+        }
+        
+        this.setProgress(basePercent + linePercent, t('progress.voice'), detailText);
+        this.setSubProgress(currentLine, totalLines);
     },
     
     complete() {
         this.setProgress(100, t('progress.complete'));
+        if (this.subProgressBar) {
+            this.subProgressBar.style.display = 'none';
+        }
         setTimeout(() => this.hide(), 1500);
     },
     
-    error(message) {
-        this.setProgress(this.progressBar ? parseInt(this.progressBar.style.width) : 0, 
-            t('progress.error'), message);
+    error(message, details = '') {
+        const currentPercent = this.progressBar ? parseInt(this.progressBar.style.width) || 0 : 0;
+        this.setProgress(currentPercent, t('progress.error'), message);
         this.progressBar?.classList.add('error');
+        
+        // Show error details
+        if (details && this.detailsText) {
+            this.detailsText.innerHTML = `<span class="error-text">${escapeHtml(message)}</span>`;
+            if (details !== message) {
+                this.detailsText.innerHTML += `<br><small>${escapeHtml(details)}</small>`;
+            }
+        }
+        
+        // Don't auto-hide on error
     },
     
     createModal() {
@@ -321,16 +481,22 @@ const generationProgress = {
         modal.innerHTML = `
             <div class="modal-content progress-modal-content">
                 <div class="progress-header">
-                    <span class="progress-icon">🎙️</span>
-                    <h3>${t('progress.starting')}</h3>
+                    <span id="progress-step-icon" class="progress-icon">🎙️</span>
+                    <h3 data-i18n="progress.starting">${t('progress.starting')}</h3>
                 </div>
                 <div class="progress-container">
                     <div class="progress-bar-wrapper">
                         <div id="progress-bar" class="progress-bar" style="width: 0%" data-percent="0%"></div>
                     </div>
+                    <div id="sub-progress-bar" class="sub-progress-wrapper" style="display: none;">
+                        <div class="sub-bar"></div>
+                    </div>
                     <p id="progress-status" class="progress-status">${t('progress.starting')}</p>
                     <p id="progress-details" class="progress-details"></p>
                 </div>
+                <button class="btn btn-outline progress-close-btn" onclick="generationProgress.hide()" style="margin-top: 1rem; display: none;">
+                    ${t('common.cancel') || 'Close'}
+                </button>
             </div>
         `;
         document.body.appendChild(modal);
@@ -340,45 +506,92 @@ const generationProgress = {
 // ==================== Error Display ====================
 
 /**
+ * Parse error from API response
+ */
+function parseApiError(error) {
+    let message = '';
+    let details = '';
+    let code = '';
+    
+    if (typeof error === 'string') {
+        message = error;
+    } else if (error) {
+        // Try various error formats
+        message = error.message || error.error || error.detail || '';
+        details = error.details || error.error_details || '';
+        code = error.code || error.error_code || '';
+        
+        // Handle FastAPI validation errors
+        if (error.detail && Array.isArray(error.detail)) {
+            message = error.detail.map(e => `${e.loc?.join('.')}: ${e.msg}`).join('; ');
+        } else if (typeof error.detail === 'object') {
+            message = JSON.stringify(error.detail);
+        }
+        
+        // Handle nested error objects
+        if (error.error && typeof error.error === 'object') {
+            message = error.error.message || JSON.stringify(error.error);
+        }
+    }
+    
+    return { message: message || t('error.unknown'), details, code };
+}
+
+/**
  * Display error with details
  */
 function showError(error, context = '') {
     console.error(`[HeinerCast Error] ${context}:`, error);
     
-    let message = '';
-    
-    if (typeof error === 'string') {
-        message = error;
-    } else if (error.message) {
-        message = error.message;
-    } else if (error.detail) {
-        message = typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail);
-    } else {
-        message = t('error.unknown');
-    }
+    const { message: rawMessage, details, code } = parseApiError(error);
+    let message = rawMessage;
     
     // Add context if provided
-    if (context) {
-        message = `${context}: ${message}`;
+    const contextPrefix = context ? `${context}: ` : '';
+    
+    // Specific error translations with original message preserved
+    let translatedMessage = message;
+    
+    if (message.includes('401') || message.includes('Unauthorized') || message.includes('unauthenticated')) {
+        translatedMessage = t('error.auth');
+    } else if (message.includes('API key') || message.includes('api_key') || message.includes('invalid_api_key')) {
+        translatedMessage = t('error.api_key') + (details ? `: ${details}` : '');
+    } else if (message.toLowerCase().includes('elevenlabs')) {
+        translatedMessage = `${t('error.elevenlabs')}: ${message}`;
+    } else if (message.toLowerCase().includes('openai')) {
+        translatedMessage = `OpenAI: ${message}`;
+    } else if (message.includes('network') || message.includes('fetch') || message.includes('ECONNREFUSED')) {
+        translatedMessage = t('error.network');
+    } else if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
+        translatedMessage = t('error.timeout') || 'Request timeout';
+    } else if (message.includes('rate limit') || message.includes('429')) {
+        translatedMessage = t('error.rate_limit') || 'Rate limit exceeded. Please wait.';
     }
     
-    // Specific error translations
-    if (message.includes('401') || message.includes('Unauthorized')) {
-        message = t('error.auth');
-    } else if (message.includes('API key') || message.includes('api_key')) {
-        message = t('error.api_key');
-    } else if (message.includes('ElevenLabs')) {
-        message = `${t('error.elevenlabs')}: ${message}`;
-    } else if (message.includes('network') || message.includes('fetch')) {
-        message = t('error.network');
+    // Build final message
+    let finalMessage = contextPrefix + translatedMessage;
+    
+    // Add error code if present
+    if (code) {
+        finalMessage += ` (${code})`;
     }
     
-    showToast(message, 'error');
+    showToast(finalMessage, 'error');
     
-    // Log to console with full details
-    if (error.stack) {
+    // Log full details to console
+    console.error('[HeinerCast] Full error:', { 
+        context, 
+        message, 
+        details, 
+        code,
+        originalError: error 
+    });
+    
+    if (error?.stack) {
         console.error(error.stack);
     }
+    
+    return { message: finalMessage, details, code };
 }
 
 // ==================== Generation Functions ====================
@@ -393,7 +606,7 @@ async function generateEpisode(episodeId, steps = ['script', 'voice', 'sounds', 
         for (const step of steps) {
             generationProgress.setStep(step);
             
-            const endpoint = `/api/generation/${episodeId}/${step}`;
+            const endpoint = `/api/generation/${step}/${episodeId}`;
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: api.getHeaders(),
@@ -429,7 +642,7 @@ async function generateStep(episodeId, step) {
     generationProgress.setStep(step);
     
     try {
-        const endpoint = `/api/generation/${episodeId}/${step}`;
+        const endpoint = `/api/generation/${step}/${episodeId}`;
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: api.getHeaders(),
@@ -642,6 +855,29 @@ style.textContent = `
     margin-top: 0.5rem;
     font-size: 0.875rem;
     color: var(--text-secondary, #aaa);
+}
+
+.progress-details .error-text {
+    color: #ef4444;
+}
+
+.sub-progress-wrapper {
+    background: var(--bg-tertiary, #2a2a2a);
+    border-radius: 4px;
+    height: 8px;
+    margin-top: 0.5rem;
+    overflow: hidden;
+}
+
+.sub-progress-wrapper .sub-bar {
+    background: var(--primary-light, #818cf8);
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 4px;
+}
+
+.progress-close-btn {
+    margin-top: 1rem;
 }
 
 /* Toast close button */
