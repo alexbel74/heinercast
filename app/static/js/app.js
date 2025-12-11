@@ -20,44 +20,83 @@ const api = {
     },
     
     async get(url) {
-        return fetch(url, {
+        const response = await fetch(url, {
             method: 'GET',
             headers: this.getHeaders(),
             credentials: 'include'
         });
+        return this.handleResponse(response);
     },
     
     async post(url, data = {}) {
-        return fetch(url, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: this.getHeaders(),
             credentials: 'include',
             body: JSON.stringify(data)
         });
+        return this.handleResponse(response);
     },
     
     async put(url, data = {}) {
-        return fetch(url, {
+        const response = await fetch(url, {
             method: 'PUT',
             headers: this.getHeaders(),
             credentials: 'include',
             body: JSON.stringify(data)
         });
+        return this.handleResponse(response);
     },
     
     async delete(url) {
-        return fetch(url, {
+        const response = await fetch(url, {
             method: 'DELETE',
             headers: this.getHeaders(),
             credentials: 'include'
         });
+        return this.handleResponse(response);
+    },
+    
+    async handleResponse(response) {
+        // Store original response for status check
+        const result = {
+            ok: response.ok,
+            status: response.status,
+            data: null,
+            error: null
+        };
+        
+        try {
+            const data = await response.json();
+            if (response.ok) {
+                result.data = data;
+            } else {
+                result.error = data;
+                // Show error toast
+                const message = data.message || data.detail || t('error.unknown');
+                showToast(message, 'error');
+            }
+        } catch (e) {
+            if (!response.ok) {
+                result.error = { message: t('error.network') };
+                showToast(t('error.network'), 'error');
+            }
+        }
+        
+        return result;
     }
 };
 
 // Toast notifications
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
-    if (!container) return;
+    if (!container) {
+        // Create container if doesn't exist
+        const newContainer = document.createElement('div');
+        newContainer.id = 'toast-container';
+        newContainer.className = 'toast-container';
+        document.body.appendChild(newContainer);
+    }
     
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -72,19 +111,30 @@ function showToast(message, type = 'info') {
     toast.innerHTML = `
         <span class="toast-icon">${icons[type] || icons.info}</span>
         <span class="toast-message">${escapeHtml(message)}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
     `;
     
-    container.appendChild(toast);
+    const targetContainer = document.getElementById('toast-container');
+    targetContainer.appendChild(toast);
     
-    // Auto remove after 5 seconds (except errors)
+    // Auto remove after timeout (longer for errors)
     const duration = type === 'error' ? 10000 : 5000;
     setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease forwards';
-        setTimeout(() => toast.remove(), 300);
+        if (toast.parentElement) {
+            toast.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
+        }
     }, duration);
 }
 
 // Modal helpers
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
@@ -128,7 +178,11 @@ document.addEventListener('click', (e) => {
 // Logout
 async function logout() {
     try {
-        await api.post('/api/auth/logout');
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: api.getHeaders(),
+            credentials: 'include'
+        });
     } catch (error) {
         console.error('Logout error:', error);
     }
@@ -136,20 +190,271 @@ async function logout() {
     window.location.href = '/login';
 }
 
-// Language change
-function changeLanguage(lang) {
-    // Save preference
+// ==================== Language System ====================
+
+/**
+ * Change language and save preference
+ */
+async function changeLanguage(lang) {
+    // Save to localStorage immediately
+    localStorage.setItem('language', lang);
+    
+    // Update translations
+    if (typeof setLanguage === 'function') {
+        setLanguage(lang);
+    }
+    
+    // If logged in, save to server
     if (api.getToken()) {
-        api.put('/api/users/settings', { language: lang })
-            .then(() => window.location.reload())
-            .catch(console.error);
-    } else {
-        localStorage.setItem('language', lang);
-        window.location.reload();
+        try {
+            await fetch('/api/users/settings', {
+                method: 'PUT',
+                headers: api.getHeaders(),
+                credentials: 'include',
+                body: JSON.stringify({ language: lang })
+            });
+        } catch (error) {
+            console.error('Failed to save language to server:', error);
+        }
+    }
+    
+    // Reload to apply server-side translations
+    window.location.reload();
+}
+
+/**
+ * Initialize language selector
+ */
+function initLanguageSelector() {
+    const langSelect = document.getElementById('language-select');
+    if (langSelect) {
+        const savedLang = localStorage.getItem('language') || 'en';
+        langSelect.value = savedLang;
+        
+        langSelect.addEventListener('change', (e) => {
+            changeLanguage(e.target.value);
+        });
     }
 }
 
-// Utility functions
+// ==================== Generation Progress ====================
+
+/**
+ * Generation progress tracker
+ */
+const generationProgress = {
+    modal: null,
+    progressBar: null,
+    statusText: null,
+    currentStep: 0,
+    totalSteps: 0,
+    
+    steps: {
+        script: { label: 'progress.script', percent: 15 },
+        voice: { label: 'progress.voice', percent: 40 },
+        sounds: { label: 'progress.sounds', percent: 20 },
+        music: { label: 'progress.music', percent: 15 },
+        merge: { label: 'progress.merge', percent: 10 }
+    },
+    
+    show() {
+        // Create modal if doesn't exist
+        if (!document.getElementById('progress-modal')) {
+            this.createModal();
+        }
+        
+        this.modal = document.getElementById('progress-modal');
+        this.progressBar = document.getElementById('progress-bar');
+        this.statusText = document.getElementById('progress-status');
+        this.detailsText = document.getElementById('progress-details');
+        
+        this.modal.classList.add('active');
+        this.setProgress(0, t('progress.starting'));
+    },
+    
+    hide() {
+        if (this.modal) {
+            this.modal.classList.remove('active');
+        }
+    },
+    
+    setProgress(percent, status, details = '') {
+        if (this.progressBar) {
+            this.progressBar.style.width = `${percent}%`;
+            this.progressBar.setAttribute('data-percent', `${Math.round(percent)}%`);
+        }
+        if (this.statusText) {
+            this.statusText.textContent = status;
+        }
+        if (this.detailsText) {
+            this.detailsText.textContent = details;
+        }
+    },
+    
+    setStep(stepName) {
+        const step = this.steps[stepName];
+        if (step) {
+            let accumulatedPercent = 0;
+            for (const [key, value] of Object.entries(this.steps)) {
+                if (key === stepName) break;
+                accumulatedPercent += value.percent;
+            }
+            this.setProgress(accumulatedPercent, t(step.label));
+        }
+    },
+    
+    complete() {
+        this.setProgress(100, t('progress.complete'));
+        setTimeout(() => this.hide(), 1500);
+    },
+    
+    error(message) {
+        this.setProgress(this.progressBar ? parseInt(this.progressBar.style.width) : 0, 
+            t('progress.error'), message);
+        this.progressBar?.classList.add('error');
+    },
+    
+    createModal() {
+        const modal = document.createElement('div');
+        modal.id = 'progress-modal';
+        modal.className = 'modal progress-modal';
+        modal.innerHTML = `
+            <div class="modal-content progress-modal-content">
+                <div class="progress-header">
+                    <span class="progress-icon">🎙️</span>
+                    <h3>${t('progress.starting')}</h3>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar-wrapper">
+                        <div id="progress-bar" class="progress-bar" style="width: 0%" data-percent="0%"></div>
+                    </div>
+                    <p id="progress-status" class="progress-status">${t('progress.starting')}</p>
+                    <p id="progress-details" class="progress-details"></p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+};
+
+// ==================== Error Display ====================
+
+/**
+ * Display error with details
+ */
+function showError(error, context = '') {
+    console.error(`[HeinerCast Error] ${context}:`, error);
+    
+    let message = '';
+    
+    if (typeof error === 'string') {
+        message = error;
+    } else if (error.message) {
+        message = error.message;
+    } else if (error.detail) {
+        message = typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail);
+    } else {
+        message = t('error.unknown');
+    }
+    
+    // Add context if provided
+    if (context) {
+        message = `${context}: ${message}`;
+    }
+    
+    // Specific error translations
+    if (message.includes('401') || message.includes('Unauthorized')) {
+        message = t('error.auth');
+    } else if (message.includes('API key') || message.includes('api_key')) {
+        message = t('error.api_key');
+    } else if (message.includes('ElevenLabs')) {
+        message = `${t('error.elevenlabs')}: ${message}`;
+    } else if (message.includes('network') || message.includes('fetch')) {
+        message = t('error.network');
+    }
+    
+    showToast(message, 'error');
+    
+    // Log to console with full details
+    if (error.stack) {
+        console.error(error.stack);
+    }
+}
+
+// ==================== Generation Functions ====================
+
+/**
+ * Generate episode content
+ */
+async function generateEpisode(episodeId, steps = ['script', 'voice', 'sounds', 'music', 'merge']) {
+    generationProgress.show();
+    
+    try {
+        for (const step of steps) {
+            generationProgress.setStep(step);
+            
+            const endpoint = `/api/generation/${episodeId}/${step}`;
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: api.getHeaders(),
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `Failed at step: ${step}`);
+            }
+            
+            // Small delay between steps
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        generationProgress.complete();
+        showToast(t('progress.complete'), 'success');
+        
+        // Reload page to show updated content
+        setTimeout(() => window.location.reload(), 1500);
+        
+    } catch (error) {
+        generationProgress.error(error.message);
+        showError(error, 'Generation');
+    }
+}
+
+/**
+ * Generate single step
+ */
+async function generateStep(episodeId, step) {
+    generationProgress.show();
+    generationProgress.setStep(step);
+    
+    try {
+        const endpoint = `/api/generation/${episodeId}/${step}`;
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: api.getHeaders(),
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Failed: ${step}`);
+        }
+        
+        generationProgress.complete();
+        showToast(t('progress.complete'), 'success');
+        
+        // Reload page to show updated content
+        setTimeout(() => window.location.reload(), 1500);
+        
+    } catch (error) {
+        generationProgress.error(error.message);
+        showError(error, step);
+    }
+}
+
+// ==================== Utility Functions ====================
+
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -182,6 +487,11 @@ function formatDuration(seconds) {
 }
 
 function formatStatus(status) {
+    // Use translated status if translations loaded
+    if (typeof t === 'function') {
+        return t(`status.${status}`, status);
+    }
+    
     const statusMap = {
         'draft': '📝 Draft',
         'script_generating': '⏳ Generating script...',
@@ -218,26 +528,42 @@ async function checkAuth() {
     const isProtected = protectedPaths.some(path => currentPath.startsWith(path));
     
     if (isProtected) {
+        const token = api.getToken();
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        
         try {
-            const response = await api.get('/api/auth/me');
+            const response = await fetch('/api/auth/me', {
+                method: 'GET',
+                headers: api.getHeaders(),
+                credentials: 'include'
+            });
+            
             if (!response.ok) {
+                localStorage.removeItem('access_token');
                 window.location.href = '/login';
             }
         } catch (error) {
+            console.error('Auth check failed:', error);
             window.location.href = '/login';
         }
     }
 }
 
-// Initialize
+// ==================== Initialize ====================
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Check authentication
     checkAuth();
     
-    // Set language selector
-    const langSelect = document.getElementById('language-select');
-    if (langSelect) {
-        const savedLang = localStorage.getItem('language') || 'en';
-        langSelect.value = savedLang;
+    // Initialize language selector
+    initLanguageSelector();
+    
+    // Apply translations if available
+    if (typeof applyTranslations === 'function') {
+        applyTranslations();
     }
 });
 
@@ -253,6 +579,84 @@ style.textContent = `
         transform: translateX(100%);
         opacity: 0;
     }
+}
+
+/* Progress Modal Styles */
+.progress-modal-content {
+    max-width: 400px;
+    text-align: center;
+}
+
+.progress-header {
+    margin-bottom: 1.5rem;
+}
+
+.progress-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.progress-container {
+    padding: 1rem 0;
+}
+
+.progress-bar-wrapper {
+    background: var(--bg-tertiary, #2a2a2a);
+    border-radius: 8px;
+    height: 24px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, var(--primary, #6366f1), var(--primary-light, #818cf8));
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 8px;
+    position: relative;
+}
+
+.progress-bar::after {
+    content: attr(data-percent);
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.progress-bar.error {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.progress-status {
+    margin-top: 1rem;
+    font-weight: 500;
+    color: var(--text-primary, #fff);
+}
+
+.progress-details {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary, #aaa);
+}
+
+/* Toast close button */
+.toast-close {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0 0.5rem;
+    opacity: 0.7;
+}
+
+.toast-close:hover {
+    opacity: 1;
 }
 `;
 document.head.appendChild(style);

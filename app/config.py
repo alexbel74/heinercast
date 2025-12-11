@@ -106,7 +106,7 @@ LLM_PROVIDERS = {
     }
 }
 
-# ElevenLabs API endpoints
+# ElevenLabs API endpoints and settings
 ELEVENLABS_BASE_URL = "https://api.elevenlabs.io"
 ELEVENLABS_ENDPOINTS = {
     "text_to_dialogue": "/v1/text-to-dialogue/with-timestamps",
@@ -115,6 +115,8 @@ ELEVENLABS_ENDPOINTS = {
     "music": "/v1/music",
     "voices": "/v1/voices"
 }
+# ВАЖНО: model_id для всех запросов к ElevenLabs
+ELEVENLABS_MODEL_ID = "eleven_v3"
 
 # kie.ai API endpoints
 KIEAI_BASE_URL = "https://kieai.erweima.ai"

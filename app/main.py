@@ -116,13 +116,34 @@ async def heinercast_exception_handler(request: Request, exc: HeinerCastExceptio
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle general exceptions"""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    # Log full error with traceback
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    
+    # Get error message
+    error_message = str(exc)
+    
+    # Parse common error patterns for user-friendly messages
+    if "401" in error_message or "Unauthorized" in error_message:
+        user_message = "Authentication failed. Please check your API key."
+    elif "403" in error_message or "Forbidden" in error_message:
+        user_message = "Access denied. Check your permissions."
+    elif "404" in error_message:
+        user_message = "Resource not found."
+    elif "429" in error_message or "rate limit" in error_message.lower():
+        user_message = "Rate limit exceeded. Please wait and try again."
+    elif "timeout" in error_message.lower():
+        user_message = "Request timed out. Please try again."
+    elif "api key" in error_message.lower() or "api_key" in error_message.lower():
+        user_message = "Invalid or missing API key. Please check your settings."
+    else:
+        user_message = "An unexpected error occurred" if not settings.app_debug else error_message
+    
     return JSONResponse(
         status_code=500,
         content={
             "error": "internal_error",
-            "message": "An unexpected error occurred",
-            "details": str(exc) if settings.app_debug else None
+            "message": user_message,
+            "details": error_message if settings.app_debug else None
         }
     )
 
@@ -133,7 +154,7 @@ app.include_router(users_router, prefix="/api/users", tags=["Users"])
 app.include_router(projects_router, prefix="/api/projects", tags=["Projects"])
 app.include_router(episodes_router, prefix="/api/episodes", tags=["Episodes"])
 app.include_router(voices_router, prefix="/api/voices", tags=["Voices"])
-app.include_router(generation_router, prefix="/api/generate", tags=["Generation"])
+app.include_router(generation_router, prefix="/api/generation", tags=["Generation"])
 app.include_router(files_router, prefix="/api/files", tags=["Files"])
 app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
 

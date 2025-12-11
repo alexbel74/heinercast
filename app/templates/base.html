@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="{{ language or 'en' }}" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,18 +22,18 @@
             </div>
             {% if user %}
             <div class="navbar-menu">
-                <a href="/dashboard" class="nav-link">Projects</a>
-                <a href="/voices" class="nav-link">Voices</a>
+                <a href="/dashboard" class="nav-link" data-i18n="nav.dashboard">Projects</a>
+                <a href="/voices" class="nav-link" data-i18n="nav.voices">Voices</a>
             </div>
             <div class="navbar-end">
                 <div class="language-selector">
                     <select id="language-select" onchange="changeLanguage(this.value)">
-                        <option value="en">EN</option>
-                        <option value="ru">RU</option>
-                        <option value="de">DE</option>
+                        <option value="en" {% if language == 'en' %}selected{% endif %}>EN</option>
+                        <option value="ru" {% if language == 'ru' %}selected{% endif %}>RU</option>
+                        <option value="de" {% if language == 'de' %}selected{% endif %}>DE</option>
                     </select>
                 </div>
-                <a href="/settings" class="nav-link">
+                <a href="/settings" class="nav-link" title="Settings">
                     <span class="icon">⚙️</span>
                 </a>
                 <div class="user-menu">
@@ -42,9 +42,9 @@
                         <span class="user-name">{{ user.username }}</span>
                     </button>
                     <div class="user-dropdown" id="user-dropdown">
-                        <a href="/settings">Settings</a>
+                        <a href="/settings" data-i18n="nav.settings">Settings</a>
                         <hr>
-                        <a href="#" onclick="logout()">Logout</a>
+                        <a href="#" onclick="logout()" data-i18n="nav.logout">Logout</a>
                     </div>
                 </div>
             </div>
@@ -52,12 +52,12 @@
             <div class="navbar-end">
                 <div class="language-selector">
                     <select id="language-select" onchange="changeLanguage(this.value)">
-                        <option value="en">EN</option>
-                        <option value="ru">RU</option>
-                        <option value="de">DE</option>
+                        <option value="en" {% if language == 'en' %}selected{% endif %}>EN</option>
+                        <option value="ru" {% if language == 'ru' %}selected{% endif %}>RU</option>
+                        <option value="de" {% if language == 'de' %}selected{% endif %}>DE</option>
                     </select>
                 </div>
-                <a href="/login" class="btn btn-outline">Login</a>
+                <a href="/login" class="btn btn-outline" data-i18n="auth.login">Login</a>
             </div>
             {% endif %}
         </nav>
@@ -71,12 +71,32 @@
     </div>
 
     <!-- Toast notifications container -->
-    <div id="toast-container"></div>
+    <div id="toast-container" class="toast-container"></div>
 
-    <!-- Modal container -->
-    <div id="modal-container"></div>
-
+    <!-- Scripts -->
+    <script src="/static/js/translations.js"></script>
     <script src="/static/js/app.js"></script>
+    <script>
+        // Set initial language from server or localStorage
+        (function() {
+            const serverLang = '{{ language or "en" }}';
+            const savedLang = localStorage.getItem('language');
+            
+            if (savedLang && savedLang !== serverLang) {
+                // localStorage takes priority, update selector
+                const select = document.getElementById('language-select');
+                if (select) select.value = savedLang;
+            } else if (!savedLang && serverLang) {
+                // Save server language to localStorage
+                localStorage.setItem('language', serverLang);
+            }
+            
+            // Set language for translations
+            if (typeof setLanguage === 'function') {
+                setLanguage(savedLang || serverLang);
+            }
+        })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
