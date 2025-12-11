@@ -1,3 +1,4 @@
+import os
 """
 Generation API Endpoints
 """
@@ -129,6 +130,14 @@ async def generate_voiceover(
     if not episode.script_json:
         raise BusinessLogicError("Episode must have a script before generating voiceover")
     
+    # Delete old audio file before regeneration
+    if episode.voice_audio_url:
+        old_path = f"/var/www/heinercast/storage{episode.voice_audio_url.replace('/storage', '')}"
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except: pass
+
     # Update status
     episode.status = EpisodeStatus.VOICEOVER_GENERATING.value
     episode.error_message = None
@@ -140,6 +149,21 @@ async def generate_voiceover(
         if not lines:
             raise BusinessLogicError("Script has no lines")
         
+        
+        # Convert local voice_id to ElevenLabs voice_id
+        from app.models import Voice
+        voice_cache = {}
+        for line in lines:
+            local_voice_id = line.get("voice_id")
+            if local_voice_id and local_voice_id not in voice_cache:
+                voice = await db.execute(
+                    select(Voice).where(Voice.id == local_voice_id)
+                )
+                voice_obj = voice.scalar_one_or_none()
+                if voice_obj and voice_obj.elevenlabs_voice_id:
+                    voice_cache[local_voice_id] = voice_obj.elevenlabs_voice_id
+            if local_voice_id in voice_cache:
+                line["voice_id"] = voice_cache[local_voice_id]
         # Initialize services
         elevenlabs_service = ElevenLabsService(current_user)
         audio_service = AudioService()
@@ -177,6 +201,7 @@ async def generate_voiceover(
         episode.status = EpisodeStatus.VOICEOVER_DONE.value
         episode.updated_at = datetime.utcnow()
         
+        await db.commit()
         return GenerateVoiceoverResponse(
             episode_id=episode.id,
             status=episode.status,
@@ -429,6 +454,26 @@ async def generate_cover(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate cover image for an episode"""
+    # Delete old cover files before regeneration
+    if episode.cover_url:
+        old_path = f"/var/www/heinercast/storage{episode.cover_url.replace('/storage', '')}"
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except: pass
+    
+    if episode.cover_variants_json:
+        for variant in episode.cover_variants_json:
+            url = variant.get('url', '')
+            if url:
+                old_path = f"/var/www/heinercast/storage{url.replace('/storage', '')}"
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except: pass
+        episode.cover_variants_json = None
+        episode.cover_url = None
+
     # Update status
     episode.status = EpisodeStatus.COVER_GENERATING.value
     episode.error_message = None
@@ -519,8 +564,11 @@ async def select_cover(
         variant["selected"] = (i == request.variant_index)
     
     episode.cover_url = variants[request.variant_index]["url"]
-    episode.cover_variants_json = variants
+    episode.cover_variants_json = variants.copy()  # Force SQLAlchemy to detect change
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(episode, "cover_variants_json")
     episode.updated_at = datetime.utcnow()
+    await db.commit()
     
     return {"message": "Cover selected", "cover_url": episode.cover_url}
 

@@ -6,6 +6,8 @@ import json
 import logging
 import os
 from typing import Optional, List, Dict, Any, Tuple
+import os
+PROXY_URL = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
 
 import httpx
 
@@ -87,7 +89,7 @@ class ElevenLabsService:
         logger.debug(f"Request body: {json.dumps(body, ensure_ascii=False)[:500]}...")
         
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
+            async with httpx.AsyncClient(timeout=300.0, proxy=PROXY_URL) as client:
                 response = await client.post(
                     url, 
                     json=body, 
@@ -246,7 +248,7 @@ class ElevenLabsService:
         logger.info(f"Generating sound effect: {prompt[:50]}...")
         
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=120.0, proxy=PROXY_URL) as client:
                 response = await client.post(
                     url, 
                     json=body, 
@@ -293,7 +295,7 @@ class ElevenLabsService:
         logger.info(f"Creating music plan: {prompt[:50]}..., duration={duration_ms}ms")
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=60.0, proxy=PROXY_URL) as client:
                 response = await client.post(
                     url, 
                     json=body, 
@@ -341,7 +343,7 @@ class ElevenLabsService:
         logger.info(f"Generating music, instrumental={force_instrumental}")
         
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
+            async with httpx.AsyncClient(timeout=300.0, proxy=PROXY_URL) as client:
                 response = await client.post(
                     url, 
                     json=body, 
@@ -375,7 +377,7 @@ class ElevenLabsService:
         logger.info("Fetching available voices from ElevenLabs")
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, proxy=PROXY_URL) as client:
                 response = await client.get(
                     url, 
                     headers=self._get_headers()

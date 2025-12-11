@@ -90,9 +90,10 @@ class CoverService:
                 response.raise_for_status()
                 
                 data = response.json()
+                logger.info(f"kie.ai API response: {data}")
                 
                 return {
-                    "task_id": data.get("taskId") or data.get("task_id"),
+                    "task_id": data.get("taskId") or data.get("task_id") or (data.get("data", {}) or {}).get("taskId") or (data.get("data", {}) or {}).get("task_id"),
                     "status": "pending"
                 }
                 
@@ -129,8 +130,11 @@ class CoverService:
                 response.raise_for_status()
                 
                 data = response.json()
+                logger.info(f"kie.ai API response: {data}")
                 
-                state = data.get("state", "").lower()
+                # Handle nested data structure
+                inner_data = data.get("data", data)
+                state = inner_data.get("state", "").lower()
                 result = {
                     "task_id": task_id,
                     "status": state,
@@ -139,13 +143,18 @@ class CoverService:
                 
                 if state == "success":
                     # Extract URL from resultJson
-                    result_json = data.get("resultJson", {})
+                    result_json = inner_data.get("resultJson", {})
                     if isinstance(result_json, str):
                         import json
                         result_json = json.loads(result_json)
                     
-                    # Try different possible URL locations
-                    result["url"] = (
+                    # Try resultUrls array first
+                    result_urls = result_json.get("resultUrls", [])
+                    if result_urls:
+                        result["url"] = result_urls[0]
+                    else:
+                        # Try different possible URL locations
+                        result["url"] = (
                         result_json.get("url") or
                         result_json.get("image_url") or
                         result_json.get("output", [{}])[0].get("url") if isinstance(result_json.get("output"), list) else None

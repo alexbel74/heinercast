@@ -47,6 +47,47 @@
         <div class="progress-steps" id="progress-steps">
             <!-- Progress steps will be rendered here -->
         </div>
+
+    </div>
+
+    <!-- Cover Generation Modal -->
+    <div id="cover-modal" class="modal">
+        <div class="modal-backdrop" onclick="closeCoverModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Generate Cover</h3>
+                <button class="modal-close" onclick="closeCoverModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Reference Image (optional)</label>
+                    <div class="file-upload-area" id="reference-upload-area">
+                        <input type="file" id="reference-file" accept="image/*" onchange="handleReferenceUpload(event)" style="display:none;">
+                        <div id="reference-preview" class="reference-preview" style="display:none;">
+                            <img id="reference-image" src="" alt="Reference">
+                            <button class="btn btn-sm" onclick="clearReference()">Remove</button>
+                        </div>
+                        <div id="reference-placeholder" class="upload-placeholder" onclick="document.getElementById('reference-file').click()">
+                            <span>📷 Click to upload reference image</span>
+                            <span class="hint">Or generate without reference</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Number of variants</label>
+                    <select id="variants-count" class="form-control">
+                        <option value="1">1 variant</option>
+                        <option value="2">2 variants</option>
+                        <option value="3">3 variants</option>
+                        <option value="4" selected>4 variants</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeCoverModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="startCoverGeneration()">Generate Cover</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -133,7 +174,7 @@ function renderActions() {
             <button class="btn btn-primary" onclick="generateVoiceover()">Generate Voiceover</button>
         `;
     } else if (status === 'voiceover_done') {
-        html = `<button class="btn btn-primary" onclick="continueGeneration()">Continue Generation</button>`;
+        html = `<button class="btn btn-primary" onclick="generateCover()">Create Cover</button>`;
     } else if (status === 'done') {
         html = `
             <button class="btn btn-outline" onclick="downloadAudio()">📥 Download Audio</button>
@@ -205,6 +246,7 @@ function renderAudio() {
         </div>
         <div class="audio-actions">
             <button class="btn btn-outline" onclick="downloadAudio()">📥 Download</button>
+            <button class="btn btn-outline btn-danger" onclick="deleteAudio()">🗑️ Delete</button>
             ${episode.music_url ? `<button class="btn btn-outline" onclick="playMusic()">🎵 Play Music Only</button>` : ''}
         </div>
     `;
@@ -237,6 +279,7 @@ function renderCover() {
                     ${variants.map((v, i) => `
                         <div class="variant ${v.selected ? 'selected' : ''}" onclick="selectCover(${i})">
                             <img src="${v.url}" alt="Variant ${i + 1}">
+                            <button class="variant-delete-btn" onclick="event.stopPropagation(); deleteCoverVariant(${i})" title="Delete variant">×</button>
                         </div>
                     `).join('')}
                 </div>
@@ -315,10 +358,10 @@ function startPolling() {
                 clearInterval(pollInterval);
                 loadEpisode();
                 if (status.status === 'done') {
-                    showToast(t('progress.complete'), 'success');
+                    showToast('🎉 Генерация завершена успешно!', 'success');
                 } else if (status.status === 'error') {
                     const errorMsg = status.error_message || t('progress.error');
-                    showToast(`${t('progress.error')}: ${errorMsg}`, 'error');
+                    showToast(`❌ Ошибка: ${errorMsg}`, 'error');
                 }
             } else {
                 // Update progress display with detailed status
@@ -338,7 +381,7 @@ async function generateScript() {
     try {
         const result = await api.post(`/api/generation/script/${episodeId}`, {});
         if (result.ok) {
-            showToast(t('progress.script'), 'info');
+            showToast('✅ Запрос на генерацию скрипта отправлен', 'success');
             loadEpisode();
         }
         // Error toast is handled by api.handleResponse
@@ -351,7 +394,7 @@ async function generateVoiceover() {
     try {
         const result = await api.post(`/api/generation/voiceover/${episodeId}`, {});
         if (result.ok) {
-            showToast(t('progress.voice'), 'info');
+            showToast('✅ Запрос на генерацию озвучки отправлен', 'success');
             loadEpisode();
         }
     } catch (error) {
@@ -372,11 +415,51 @@ async function continueGeneration() {
     }
 }
 
-async function generateCover() {
+function generateCover() {
+    console.log("generateCover called");
+    document.getElementById("cover-modal").classList.add("active");
+}
+
+let referenceImageUrl = null;
+
+function closeCoverModal() {
+    document.getElementById("cover-modal").classList.remove("active");
+    clearReference();
+}
+
+function handleReferenceUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById("reference-image").src = e.target.result;
+        document.getElementById("reference-preview").style.display = "block";
+        document.getElementById("reference-placeholder").style.display = "none";
+        referenceImageUrl = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearReference() {
+    document.getElementById("reference-file").value = "";
+    document.getElementById("reference-image").src = "";
+    document.getElementById("reference-preview").style.display = "none";
+    document.getElementById("reference-placeholder").style.display = "block";
+    referenceImageUrl = null;
+}
+
+async function startCoverGeneration() {
+    closeCoverModal();
+    const variantsCount = parseInt(document.getElementById("variants-count").value);
+    
     try {
-        const result = await api.post(`/api/generation/cover/${episodeId}`, { variants_count: 4 });
+        const result = await api.post(`/api/generation/cover/${episodeId}`, { 
+            variants_count: variantsCount,
+            reference_image_url: referenceImageUrl
+        });
         if (result.ok) {
-            showToast(t('progress.cover'), 'info');
+            showToast('✅ Запрос на генерацию обложки отправлен', 'success');
             loadEpisode();
         }
     } catch (error) {
@@ -392,6 +475,153 @@ async function selectCover(index) {
         }
     } catch (error) {
         showError(error, 'Select cover');
+    }
+}
+
+
+    
+    async function deleteAudio() {
+        if (!confirm('Удалить аудио файл? Это действие нельзя отменить.')) return;
+        
+        try {
+            const response = await api.delete(`/api/episodes/${episodeId}/audio`);
+            if (response.ok) {
+                showToast('✅ Аудио удалено', 'success');
+                loadEpisode();
+            } else {
+                throw new Error('Failed');
+            }
+        } catch (error) {
+            showToast('❌ Ошибка удаления аудио', 'error');
+        }
+    }
+
+    async function regenerateCover() {
+        if (!confirm('Перегенерировать обложку? Текущие варианты будут удалены.')) return;
+        document.getElementById('cover-modal').classList.add('active');
+    }
+    
+    async function regenerateScript() {
+        if (!confirm('Перегенерировать скрипт? Текущий скрипт будет заменён.')) return;
+        
+        try {
+            const response = await api.post(`/api/generation/script/${episodeId}`);
+            if (response.ok) {
+                showToast('✅ Запрос на перегенерацию скрипта отправлен', 'success');
+                startPolling();
+            } else {
+                throw new Error('Failed');
+            }
+        } catch (error) {
+            showToast('❌ Ошибка перегенерации скрипта', 'error');
+        }
+    }
+
+async function deleteCoverVariant(index) {
+    if (!confirm('Удалить этот вариант обложки?')) return;
+    
+    try {
+        const result = await api.delete(`/api/episodes/${episodeId}/cover/${index}`);
+        if (result.ok) {
+            showToast('✅ Вариант обложки удален', 'success');
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, 'Delete cover variant');
+    }
+}
+
+function editScript() {
+    if (!episode.script_json || !episode.script_json.lines) {
+        showToast("No script to edit", "error");
+        return;
+    }
+    
+    const lines = episode.script_json.lines;
+    let html = `
+        <div id="script-editor-modal" class="modal active">
+            <div class="modal-backdrop" onclick="closeScriptEditor()"></div>
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3>Edit Script</h3>
+                    <button class="modal-close" onclick="closeScriptEditor()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="script-lines">
+    `;
+    
+    lines.forEach((line, index) => {
+        html += `
+            <div class="script-line" data-index="${index}">
+                <div class="line-header">
+                    <span class="speaker-name">${line.speaker}</span>
+                    <button class="btn btn-sm btn-danger" onclick="deleteScriptLine(${index})">🗑️</button>
+                </div>
+                <textarea class="line-text" data-index="${index}" rows="3">${line.text}</textarea>
+            </div>
+        `;
+    });
+    
+    html += `
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" onclick="closeScriptEditor()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveScript()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeScriptEditor() {
+    const modal = document.getElementById('script-editor-modal');
+    if (modal) modal.remove();
+}
+
+function deleteScriptLine(index) {
+    if (!confirm('Delete this line?')) return;
+    const lineEl = document.querySelector(`.script-line[data-index="${index}"]`);
+    if (lineEl) lineEl.remove();
+}
+
+async function saveScript() {
+    const textareas = document.querySelectorAll('.script-line .line-text');
+    const newLines = [];
+    const originalLines = episode.script_json.lines;
+    
+    textareas.forEach((textarea) => {
+        const index = parseInt(textarea.dataset.index);
+        const originalLine = originalLines[index];
+        if (originalLine) {
+            newLines.push({
+                ...originalLine,
+                text: textarea.value
+            });
+        }
+    });
+    
+    const newScriptJson = {
+        ...episode.script_json,
+        lines: newLines
+    };
+    
+    try {
+        const response = await api.put(`/api/episodes/${episodeId}/script`, {
+            script_json: newScriptJson
+        });
+        
+        if (response.ok) {
+            showToast('✅ Script saved', 'success');
+            closeScriptEditor();
+            loadEpisode();
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('❌ Error saving script', 'error');
     }
 }
 
