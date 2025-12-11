@@ -21,9 +21,16 @@ class UserCreate(UserBase):
 
 
 class UserLogin(BaseModel):
-    """Schema for user login"""
-    username: str
+    """Schema for user login - accepts email or username"""
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
     password: str
+    
+    @field_validator('username', mode='before')
+    @classmethod
+    def check_login_field(cls, v, info):
+        # Allow login with email or username
+        return v
 
 
 class UserUpdate(BaseModel):

@@ -84,11 +84,16 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     """Login and get tokens"""
+    # Get login identifier (email or username)
+    login_id = credentials.email or credentials.username
+    if not login_id:
+        raise InvalidCredentialsError()
+    
     # Find user by username or email
     result = await db.execute(
         select(User).where(
-            (User.username == credentials.username) | 
-            (User.email == credentials.username)
+            (User.username == login_id) | 
+            (User.email == login_id)
         )
     )
     user = result.scalar_one_or_none()

@@ -55,8 +55,14 @@ async function handleLogin(event) {
     btn.textContent = 'Signing in...';
     errorDiv.textContent = '';
     
-    const username = document.getElementById('username').value;
+    const loginId = document.getElementById('username').value;
     const password = document.getElementById('password').value;
+    
+    // Detect if it's email or username
+    const isEmail = loginId.includes('@');
+    const payload = isEmail 
+        ? { email: loginId, password } 
+        : { username: loginId, password };
     
     try {
         const response = await fetch('/api/auth/login', {
@@ -64,7 +70,7 @@ async function handleLogin(event) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify(payload)
         });
         
         const data = await response.json();
