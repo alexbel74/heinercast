@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}Episode - HeinerCast{% endblock %}
+
+{% block content %}
+<div class="episode-page">
+    <div class="page-header">
+        <a href="#" id="back-link" class="back-link">← Back to Project</a>
+        <div class="page-actions" id="page-actions">
+            <!-- Actions will be loaded based on status -->
+        </div>
+    </div>
+    
+    <div class="episode-header" id="episode-header">
+        <div class="loading-spinner">Loading episode...</div>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="tabs" id="episode-tabs">
+        <button class="tab active" data-tab="script">Script</button>
+        <button class="tab" data-tab="audio">Audio</button>
+        <button class="tab" data-tab="cover">Cover</button>
+    </div>
+    
+    <!-- Tab Contents -->
+    <div class="tab-content active" id="tab-script">
+        <div class="script-container" id="script-container">
+            <!-- Script will be loaded here -->
+        </div>
+    </div>
+    
+    <div class="tab-content" id="tab-audio">
+        <div class="audio-container" id="audio-container">
+            <!-- Audio player will be loaded here -->
+        </div>
+    </div>
+    
+    <div class="tab-content" id="tab-cover">
+        <div class="cover-container" id="cover-container">
+            <!-- Cover will be loaded here -->
+        </div>
+    </div>
+    
+    <!-- Generation Progress -->
+    <div class="generation-progress" id="generation-progress" style="display: none;">
+        <h3>Generation Progress</h3>
+        <div class="progress-steps" id="progress-steps">
+            <!-- Progress steps will be rendered here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const episodeId = '{{ episode_id }}';
+let episode = null;
+let pollInterval = null;
+
+async function loadEpisode() {
+    try {
+        const response = await api.get(`/api/episodes/${episodeId}`);
+        episode = await response.json();
+        renderEpisode();
+        
+        // Start polling if in progress
+        if (isInProgress(episode.status)) {
+            startPolling();
+        }
+    } catch (error) {
+        showToast('Failed to load episode', 'error');
+    }
+}
+
+function isInProgress(status) {
+    return ['script_generating', 'voiceover_generating', 'sounds_generating', 
+            'music_generating', 'merging', 'cover_generating'].includes(status);
+}
+
+function renderEpisode() {
+    document.getElementById('back-link').href = `/projects/${episode.project_id}`;
+    
+    // Header
+    const header = document.getElementById('episode-header');
+    header.innerHTML = `
+        <div class="episode-title-row">
+            <h1>#${episode.episode_number}: ${escapeHtml(episode.title)}</h1>
+            <span class="status-badge status-${episode.status}">${formatStatus(episode.status)}</span>
+        </div>
+        <p class="episode-description">${escapeHtml(episode.description)}</p>
+        <div class="episode-meta">
+            <span>Target: ${episode.target_duration_minutes} min</span>
+            ${episode.final_audio_duration_seconds ? `<span>Actual: ${formatDuration(episode.final_audio_duration_seconds)}</span>` : ''}
+            ${episode.include_sound_effects ? '<span class="tag">🔊 Sounds</span>' : ''}
+            ${episode.include_background_music ? '<span class="tag">🎵 Music</span>' : ''}
+        </div>
+        ${episode.error_message ? `<div class="error-message">❌ ${escapeHtml(episode.error_message)}</div>` : ''}
+    `;
+    
+    // Actions
+    const actions = document.getElementById('page-actions');
+    actions.innerHTML = renderActions();
+    
+    // Script tab
+    renderScript();
+    
+    // Audio tab
+    renderAudio();
+    
+    // Cover tab
+    renderCover();
+    
+    // Progress
+    if (isInProgress(episode.status)) {
+        renderProgress();
+    } else {
+        document.getElementById('generation-progress').style.display = 'none';
+    }
+}
+
+function renderActions() {
+    const status = episode.status;
+    let html = '';
+    
+    if (status === 'draft') {
+        html = `<button class="btn btn-primary" onclick="generateScript()">Generate Script</button>`;
+    } else if (status === 'script_done') {
+        html = `
+            <button class="btn btn-outline" onclick="regenerateScript()">Regenerate Script</button>
+            <button class="btn btn-primary" onclick="generateVoiceover()">Generate Voiceover</button>
+        `;
+    } else if (status === 'voiceover_done') {
+        html = `<button class="btn btn-primary" onclick="continueGeneration()">Continue Generation</button>`;
+    } else if (status === 'done') {
+        html = `
+            <button class="btn btn-outline" onclick="downloadAudio()">📥 Download Audio</button>
+            <button class="btn btn-primary" onclick="createContinuation()">Create Continuation</button>
+        `;
+    } else if (status === 'error') {
+        html = `<button class="btn btn-primary" onclick="retryGeneration()">Retry</button>`;
+    }
+    
+    return html;
+}
+
+function renderScript() {
+    const container = document.getElementById('script-container');
+    
+    if (!episode.script_json) {
+        container.innerHTML = `
+            <div class="empty-state-small">
+                <p>No script yet. Click "Generate Script" to create one.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const lines = episode.script_json.lines || [];
+    container.innerHTML = `
+        <div class="script-header">
+            <h3>${escapeHtml(episode.script_json.story_title || episode.title)}</h3>
+            <span class="script-genre">${escapeHtml(episode.script_json.genre_tone || '')}</span>
+        </div>
+        <div class="script-lines">
+            ${lines.map((line, i) => `
+                <div class="script-line">
+                    <div class="line-speaker">${escapeHtml(line.speaker)}</div>
+                    <div class="line-text">${escapeHtml(line.text)}</div>
+                    ${line.sound_effect ? `<div class="line-sound">🔊 ${escapeHtml(line.sound_effect)}</div>` : ''}
+                </div>
+            `).join('')}
+        </div>
+        <div class="script-actions">
+            <button class="btn btn-outline" onclick="editScript()">Edit Script</button>
+        </div>
+    `;
+}
+
+function renderAudio() {
+    const container = document.getElementById('audio-container');
+    
+    const audioUrl = episode.final_audio_url || episode.voice_audio_url;
+    if (!audioUrl) {
+        container.innerHTML = `
+            <div class="empty-state-small">
+                <p>No audio yet. Generate voiceover first.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="audio-player">
+            <audio id="audio-element" controls>
+                <source src="${audioUrl}" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+            <div class="audio-info">
+                <span>Duration: ${formatDuration(episode.final_audio_duration_seconds || episode.voice_audio_duration_seconds || 0)}</span>
+                ${episode.voice_audio_url && !episode.final_audio_url ? '<span class="tag">Voice only</span>' : ''}
+            </div>
+        </div>
+        <div class="audio-actions">
+            <button class="btn btn-outline" onclick="downloadAudio()">📥 Download</button>
+            ${episode.music_url ? `<button class="btn btn-outline" onclick="playMusic()">🎵 Play Music Only</button>` : ''}
+        </div>
+    `;
+}
+
+function renderCover() {
+    const container = document.getElementById('cover-container');
+    
+    if (!episode.cover_url) {
+        container.innerHTML = `
+            <div class="empty-state-small">
+                <p>No cover yet.</p>
+                ${episode.status === 'audio_done' || episode.status === 'done' ? 
+                    '<button class="btn btn-primary" onclick="generateCover()">Generate Cover</button>' : ''}
+            </div>
+        `;
+        return;
+    }
+    
+    const variants = episode.cover_variants_json || [{ url: episode.cover_url, selected: true }];
+    
+    container.innerHTML = `
+        <div class="cover-preview">
+            <img src="${episode.cover_url}" alt="Episode Cover" class="cover-image">
+        </div>
+        ${variants.length > 1 ? `
+            <div class="cover-variants">
+                <h4>Variants</h4>
+                <div class="variants-grid">
+                    ${variants.map((v, i) => `
+                        <div class="variant ${v.selected ? 'selected' : ''}" onclick="selectCover(${i})">
+                            <img src="${v.url}" alt="Variant ${i + 1}">
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
+        <div class="cover-actions">
+            <button class="btn btn-outline" onclick="downloadCover()">📥 Download Cover</button>
+            <button class="btn btn-outline" onclick="regenerateCover()">🔄 Regenerate</button>
+        </div>
+    `;
+}
+
+function renderProgress() {
+    document.getElementById('generation-progress').style.display = 'block';
+    
+    const steps = [
+        { id: 'script', name: 'Script', icon: '📝' },
+        { id: 'voiceover', name: 'Voiceover', icon: '🎙️' },
+    ];
+    
+    if (episode.include_sound_effects) {
+        steps.push({ id: 'sounds', name: 'Sounds', icon: '🔊' });
+    }
+    if (episode.include_background_music) {
+        steps.push({ id: 'music', name: 'Music', icon: '🎵' });
+    }
+    steps.push({ id: 'merge', name: 'Merge', icon: '🔄' });
+    steps.push({ id: 'cover', name: 'Cover', icon: '🎨' });
+    
+    const statusMap = {
+        'draft': 0,
+        'script_generating': 0,
+        'script_done': 1,
+        'voiceover_generating': 1,
+        'voiceover_done': 2,
+        'sounds_generating': 2,
+        'sounds_done': 3,
+        'music_generating': 3,
+        'music_done': 4,
+        'merging': 4,
+        'audio_done': 5,
+        'cover_generating': 5,
+        'done': 6
+    };
+    
+    const currentStep = statusMap[episode.status] || 0;
+    
+    document.getElementById('progress-steps').innerHTML = steps.map((step, i) => {
+        let state = 'pending';
+        if (i < currentStep) state = 'done';
+        else if (i === currentStep) state = 'active';
+        
+        return `
+            <div class="progress-step ${state}">
+                <span class="step-icon">${state === 'done' ? '✅' : state === 'active' ? '⏳' : step.icon}</span>
+                <span class="step-name">${step.name}</span>
+            </div>
+        `;
+    }).join('<div class="step-connector"></div>');
+}
+
+function startPolling() {
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(async () => {
+        try {
+            const response = await api.get(`/api/generate/status/${episodeId}`);
+            const status = await response.json();
+            
+            if (!isInProgress(status.status)) {
+                clearInterval(pollInterval);
+                loadEpisode();
+                if (status.status === 'done') {
+                    showToast('Generation complete!', 'success');
+                } else if (status.status === 'error') {
+                    showToast('Generation failed', 'error');
+                }
+            } else {
+                // Update progress display
+                episode.status = status.status;
+                renderProgress();
+            }
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+    }, 3000);
+}
+
+async function generateScript() {
+    try {
+        const response = await api.post(`/api/generate/script/${episodeId}`);
+        if (response.ok) {
+            showToast('Script generation started', 'info');
+            loadEpisode();
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to start generation', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function generateVoiceover() {
+    try {
+        const response = await api.post(`/api/generate/voiceover/${episodeId}`);
+        if (response.ok) {
+            showToast('Voiceover generation started', 'info');
+            loadEpisode();
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function continueGeneration() {
+    // Continue with sounds, music, merge based on episode settings
+    try {
+        const response = await api.post(`/api/generate/full/${episodeId}`);
+        if (response.ok) {
+            showToast('Generation started', 'info');
+            loadEpisode();
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function generateCover() {
+    try {
+        const response = await api.post(`/api/generate/cover/${episodeId}`, { variants_count: 4 });
+        if (response.ok) {
+            showToast('Cover generation started', 'info');
+            loadEpisode();
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function selectCover(index) {
+    try {
+        const response = await api.post(`/api/generate/cover/${episodeId}/select`, { variant_index: index });
+        if (response.ok) {
+            loadEpisode();
+        }
+    } catch (error) {
+        showToast('Failed to select cover', 'error');
+    }
+}
+
+function downloadAudio() {
+    window.open(`/api/files/audio/${episodeId}`, '_blank');
+}
+
+function downloadCover() {
+    window.open(`/api/files/cover/${episodeId}`, '_blank');
+}
+
+async function createContinuation() {
+    const description = prompt('Enter description for the continuation episode:');
+    if (!description) return;
+    
+    try {
+        const response = await api.post(`/api/episodes/${episodeId}/continuation`, {
+            description: description,
+            title_auto_generated: true,
+            show_episode_number: true,
+            target_duration_minutes: episode.target_duration_minutes
+        });
+        
+        if (response.ok) {
+            const newEpisode = await response.json();
+            showToast('Continuation created!', 'success');
+            window.location.href = `/episodes/${newEpisode.id}`;
+        }
+    } catch (error) {
+        showToast('Failed to create continuation', 'error');
+    }
+}
+
+// Tab handling
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    });
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', loadEpisode);
+
+// Cleanup on page leave
+window.addEventListener('beforeunload', () => {
+    if (pollInterval) clearInterval(pollInterval);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Register - HeinerCast{% endblock %}
+
+{% block navbar %}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <a href="/" class="auth-logo">
+                <span class="logo-icon">🎙️</span>
+                <span class="logo-text">HeinerCast</span>
+            </a>
+            <h1>Create Account</h1>
+            <p>Start creating AI-powered audiobooks</p>
+        </div>
+        
+        <form id="register-form" class="auth-form" onsubmit="handleRegister(event)">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required 
+                       placeholder="Enter your email">
+            </div>
+            
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required
+                       pattern="^[a-zA-Z0-9_]+$" minlength="3" maxlength="50"
+                       placeholder="Choose a username">
+                <span class="form-hint">Letters, numbers, and underscores only</span>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required
+                       minlength="8"
+                       placeholder="Create a password">
+                <span class="form-hint">At least 8 characters</span>
+            </div>
+            
+            <div class="form-group">
+                <label for="language">Preferred Language</label>
+                <select id="language" name="language">
+                    <option value="en">English</option>
+                    <option value="ru">Русский</option>
+                    <option value="de">Deutsch</option>
+                </select>
+            </div>
+            
+            <div class="form-error" id="register-error"></div>
+            
+            <button type="submit" class="btn btn-primary btn-block" id="register-btn">
+                Create Account
+            </button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>Already have an account? <a href="/login">Sign in</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function handleRegister(event) {
+    event.preventDefault();
+    
+    const btn = document.getElementById('register-btn');
+    const errorDiv = document.getElementById('register-error');
+    
+    btn.disabled = true;
+    btn.textContent = 'Creating account...';
+    errorDiv.textContent = '';
+    
+    const email = document.getElementById('email').value;
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const language = document.getElementById('language').value;
+    
+    try {
+        const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, username, password, language })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            localStorage.setItem('access_token', data.access_token);
+            window.location.href = '/dashboard';
+        } else {
+            errorDiv.textContent = data.message || 'Registration failed. Please try again.';
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Network error. Please try again.';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Project - HeinerCast{% endblock %}
+
+{% block content %}
+<div class="project-page">
+    <div class="page-header">
+        <a href="/dashboard" class="back-link">← Back to Projects</a>
+        <div class="page-actions">
+            <button class="btn btn-outline" onclick="showEditProjectModal()">Edit</button>
+            <button class="btn btn-danger-outline" onclick="confirmDeleteProject()">Delete</button>
+        </div>
+    </div>
+    
+    <div class="project-info" id="project-info">
+        <div class="loading-spinner">Loading project...</div>
+    </div>
+    
+    <div class="project-sections">
+        <!-- Characters Section -->
+        <section class="section">
+            <div class="section-header">
+                <h2>Characters</h2>
+                <button class="btn btn-outline btn-sm" onclick="showAddCharacterModal()">
+                    + Add Character
+                </button>
+            </div>
+            <div class="characters-list" id="characters-list">
+                <!-- Characters will be loaded here -->
+            </div>
+        </section>
+        
+        <!-- Episodes Section -->
+        <section class="section">
+            <div class="section-header">
+                <h2>Episodes</h2>
+                <button class="btn btn-primary" onclick="showCreateEpisodeModal()">
+                    + New Episode
+                </button>
+            </div>
+            <div class="episodes-list" id="episodes-list">
+                <!-- Episodes will be loaded here -->
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- Add Character Modal -->
+<div class="modal" id="add-character-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add Character</h2>
+            <button class="modal-close" onclick="closeModal('add-character-modal')">&times;</button>
+        </div>
+        <form id="add-character-form" onsubmit="addCharacter(event)">
+            <div class="form-group">
+                <label for="char-name">Character Name *</label>
+                <input type="text" id="char-name" required maxlength="100"
+                       placeholder="e.g., André Heiner">
+            </div>
+            <div class="form-group">
+                <label for="char-role">Role *</label>
+                <input type="text" id="char-role" required maxlength="100"
+                       placeholder="e.g., Main Character">
+            </div>
+            <div class="form-group">
+                <label for="char-voice">Voice *</label>
+                <select id="char-voice" required>
+                    <option value="">Select a voice...</option>
+                </select>
+                <a href="/voices" class="form-hint-link">Manage voice library →</a>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('add-character-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Character</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create Episode Modal -->
+<div class="modal" id="create-episode-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>New Episode</h2>
+            <button class="modal-close" onclick="closeModal('create-episode-modal')">&times;</button>
+        </div>
+        <form id="create-episode-form" onsubmit="createEpisode(event)">
+            <div class="form-group">
+                <label for="ep-title">Title (optional)</label>
+                <input type="text" id="ep-title" maxlength="200"
+                       placeholder="Leave empty to auto-generate">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="ep-auto-title" checked>
+                    <span>Auto-generate title from script</span>
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="ep-description">Description *</label>
+                <textarea id="ep-description" required maxlength="5000" rows="4"
+                          placeholder="What happens in this episode..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="ep-duration">Target Duration (minutes) *</label>
+                <input type="number" id="ep-duration" required min="1" max="60" value="10">
+            </div>
+            <div class="form-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="ep-sounds">
+                    <span>Include sound effects</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="ep-music">
+                    <span>Include background music</span>
+                </label>
+            </div>
+            <label class="checkbox-label">
+                <input type="checkbox" id="ep-show-number" checked>
+                <span>Show episode number in title</span>
+            </label>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('create-episode-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Episode</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const projectId = '{{ project_id }}';
+let project = null;
+let voices = [];
+
+async function loadProject() {
+    try {
+        const response = await api.get(`/api/projects/${projectId}`);
+        project = await response.json();
+        renderProject();
+        loadVoices();
+    } catch (error) {
+        showToast('Failed to load project', 'error');
+    }
+}
+
+async function loadVoices() {
+    try {
+        const response = await api.get('/api/voices');
+        voices = await response.json();
+        updateVoiceSelect();
+    } catch (error) {
+        console.error('Failed to load voices');
+    }
+}
+
+function updateVoiceSelect() {
+    const select = document.getElementById('char-voice');
+    select.innerHTML = '<option value="">Select a voice...</option>' +
+        voices.map(v => `<option value="${v.id}">${escapeHtml(v.name)} (${escapeHtml(v.elevenlabs_name)})</option>`).join('');
+}
+
+function renderProject() {
+    const infoDiv = document.getElementById('project-info');
+    infoDiv.innerHTML = `
+        <h1 class="project-page-title">${escapeHtml(project.title)}</h1>
+        <p class="project-page-description">${escapeHtml(project.description)}</p>
+        <div class="project-meta">
+            <span class="meta-item"><strong>Genre:</strong> ${escapeHtml(project.genre_tone)}</span>
+            ${project.musical_atmosphere ? `<span class="meta-item"><strong>Atmosphere:</strong> ${escapeHtml(project.musical_atmosphere)}</span>` : ''}
+        </div>
+        <div class="project-options">
+            ${project.include_sound_effects ? '<span class="tag">🔊 Sound Effects</span>' : ''}
+            ${project.include_background_music ? '<span class="tag">🎵 Background Music</span>' : ''}
+        </div>
+    `;
+    
+    // Render characters
+    const charList = document.getElementById('characters-list');
+    if (project.characters && project.characters.length > 0) {
+        charList.innerHTML = project.characters.map(char => `
+            <div class="character-card">
+                <div class="character-info">
+                    <span class="character-icon">👤</span>
+                    <div>
+                        <div class="character-name">${escapeHtml(char.character_name)}</div>
+                        <div class="character-role">${escapeHtml(char.role)}</div>
+                    </div>
+                </div>
+                <div class="character-voice">
+                    → ${escapeHtml(char.elevenlabs_name || 'No voice')}
+                </div>
+                <button class="btn-icon" onclick="deleteCharacter('${char.id}')" title="Remove">🗑️</button>
+            </div>
+        `).join('');
+    } else {
+        charList.innerHTML = '<p class="empty-text">No characters yet. Add characters to assign voices for your episodes.</p>';
+    }
+    
+    // Load episodes
+    loadEpisodes();
+}
+
+async function loadEpisodes() {
+    try {
+        const response = await api.get(`/api/projects/${projectId}/episodes`);
+        const data = await response.json();
+        
+        const epList = document.getElementById('episodes-list');
+        if (data.items.length > 0) {
+            epList.innerHTML = data.items.map(ep => `
+                <a href="/episodes/${ep.id}" class="episode-card">
+                    <div class="episode-header">
+                        <span class="episode-number">#${ep.episode_number}</span>
+                        <span class="episode-status status-${ep.status}">${formatStatus(ep.status)}</span>
+                    </div>
+                    <h3 class="episode-title">${escapeHtml(ep.title)}</h3>
+                    <div class="episode-meta">
+                        ${ep.final_audio_duration_seconds ? `<span>${formatDuration(ep.final_audio_duration_seconds)}</span>` : ''}
+                        ${ep.include_sound_effects ? '<span>🔊</span>' : ''}
+                        ${ep.include_background_music ? '<span>🎵</span>' : ''}
+                    </div>
+                    ${ep.status === 'done' ? `
+                        <div class="episode-actions">
+                            <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); playAudio('${ep.id}')">▶️ Play</button>
+                            <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); downloadAudio('${ep.id}')">📥</button>
+                        </div>
+                    ` : ''}
+                </a>
+            `).join('');
+        } else {
+            epList.innerHTML = '<p class="empty-text">No episodes yet. Create your first episode to start generating content.</p>';
+        }
+    } catch (error) {
+        showToast('Failed to load episodes', 'error');
+    }
+}
+
+function showAddCharacterModal() {
+    if (project.characters && project.characters.length >= 5) {
+        showToast('Maximum 5 characters per project', 'warning');
+        return;
+    }
+    document.getElementById('add-character-modal').classList.add('active');
+}
+
+async function addCharacter(event) {
+    event.preventDefault();
+    
+    const data = {
+        character_name: document.getElementById('char-name').value,
+        role: document.getElementById('char-role').value,
+        voice_id: document.getElementById('char-voice').value,
+        sort_order: (project.characters?.length || 0)
+    };
+    
+    try {
+        const response = await api.post(`/api/projects/${projectId}/characters`, data);
+        if (response.ok) {
+            showToast('Character added!', 'success');
+            closeModal('add-character-modal');
+            loadProject();
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to add character', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function deleteCharacter(charId) {
+    if (!confirm('Remove this character?')) return;
+    
+    try {
+        const response = await api.delete(`/api/projects/${projectId}/characters/${charId}`);
+        if (response.ok) {
+            showToast('Character removed', 'success');
+            loadProject();
+        }
+    } catch (error) {
+        showToast('Failed to remove character', 'error');
+    }
+}
+
+function showCreateEpisodeModal() {
+    // Set default options from project
+    document.getElementById('ep-sounds').checked = project.include_sound_effects;
+    document.getElementById('ep-music').checked = project.include_background_music;
+    document.getElementById('create-episode-modal').classList.add('active');
+}
+
+async function createEpisode(event) {
+    event.preventDefault();
+    
+    const data = {
+        title: document.getElementById('ep-title').value || null,
+        title_auto_generated: document.getElementById('ep-auto-title').checked,
+        description: document.getElementById('ep-description').value,
+        target_duration_minutes: parseInt(document.getElementById('ep-duration').value),
+        include_sound_effects: document.getElementById('ep-sounds').checked,
+        include_background_music: document.getElementById('ep-music').checked,
+        show_episode_number: document.getElementById('ep-show-number').checked
+    };
+    
+    try {
+        const response = await api.post(`/api/projects/${projectId}/episodes`, data);
+        if (response.ok) {
+            const episode = await response.json();
+            showToast('Episode created!', 'success');
+            closeModal('create-episode-modal');
+            window.location.href = `/episodes/${episode.id}`;
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to create episode', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function confirmDeleteProject() {
+    if (!confirm('Delete this project and all its episodes? This cannot be undone.')) return;
+    
+    try {
+        const response = await api.delete(`/api/projects/${projectId}`);
+        if (response.ok) {
+            showToast('Project deleted', 'success');
+            window.location.href = '/dashboard';
+        }
+    } catch (error) {
+        showToast('Failed to delete project', 'error');
+    }
+}
+
+function formatStatus(status) {
+    const statusMap = {
+        'draft': '📝 Draft',
+        'script_generating': '⏳ Generating script...',
+        'script_done': '✅ Script ready',
+        'voiceover_generating': '🎙️ Generating voice...',
+        'voiceover_done': '✅ Voice ready',
+        'sounds_generating': '🔊 Generating sounds...',
+        'sounds_done': '✅ Sounds ready',
+        'music_generating': '🎵 Generating music...',
+        'music_done': '✅ Music ready',
+        'merging': '🔄 Merging audio...',
+        'audio_done': '✅ Audio ready',
+        'cover_generating': '🎨 Generating cover...',
+        'done': '✅ Done',
+        'error': '❌ Error'
+    };
+    return statusMap[status] || status;
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', loadProject);
+</script>
+{% endblock %}

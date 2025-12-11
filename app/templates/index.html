@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}HeinerCast - AI Audiobook Production{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">🎙️ AI-Powered</div>
+        <h1 class="hero-title">Create Audiobooks with AI</h1>
+        <p class="hero-subtitle">
+            Multi-character voiceover, sound effects, background music, and cover art - 
+            all automated with cutting-edge AI technology.
+        </p>
+        <div class="hero-actions">
+            <a href="/register" class="btn btn-primary btn-lg">Get Started Free</a>
+            <a href="#features" class="btn btn-outline btn-lg">Learn More</a>
+        </div>
+    </div>
+    <div class="hero-visual">
+        <div class="hero-card">
+            <div class="waveform">
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section id="features" class="features-section">
+    <h2 class="section-title">Everything You Need</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">📝</div>
+            <h3>AI Script Generation</h3>
+            <p>Generate engaging multi-character scripts with advanced AI. Support for OpenRouter, OpenAI, and Polza providers.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎭</div>
+            <h3>Multi-Voice Dialogue</h3>
+            <p>Professional voiceover with ElevenLabs. Up to 5 unique characters with distinct voices per episode.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔊</div>
+            <h3>Sound Effects</h3>
+            <p>AI-generated sound effects that bring your story to life. Automatically placed at the right moments.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎵</div>
+            <h3>Background Music</h3>
+            <p>Atmospheric instrumental music generated to match your story's mood and genre.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎨</div>
+            <h3>Cover Art</h3>
+            <p>Generate stunning cover art with kie.ai. Multiple variants to choose from.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📚</div>
+            <h3>Series Support</h3>
+            <p>Create multi-episode series with context continuity. AI remembers previous episodes.</p>
+        </div>
+    </div>
+</section>
+
+<section class="cta-section">
+    <div class="cta-content">
+        <h2>Ready to Create Your First Audiobook?</h2>
+        <p>Join thousands of content creators using HeinerCast</p>
+        <a href="/register" class="btn btn-action btn-lg">Start Creating Now</a>
+    </div>
+</section>
+{% endblock %}

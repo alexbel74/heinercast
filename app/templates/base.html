@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}HeinerCast{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div id="app">
+        {% block navbar %}
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <a href="/" class="logo">
+                    <span class="logo-icon">🎙️</span>
+                    <span class="logo-text">HeinerCast</span>
+                </a>
+            </div>
+            {% if user %}
+            <div class="navbar-menu">
+                <a href="/dashboard" class="nav-link">Projects</a>
+                <a href="/voices" class="nav-link">Voices</a>
+            </div>
+            <div class="navbar-end">
+                <div class="language-selector">
+                    <select id="language-select" onchange="changeLanguage(this.value)">
+                        <option value="en">EN</option>
+                        <option value="ru">RU</option>
+                        <option value="de">DE</option>
+                    </select>
+                </div>
+                <a href="/settings" class="nav-link">
+                    <span class="icon">⚙️</span>
+                </a>
+                <div class="user-menu">
+                    <button class="user-button" onclick="toggleUserMenu()">
+                        <span class="user-avatar">{{ user.username[0]|upper }}</span>
+                        <span class="user-name">{{ user.username }}</span>
+                    </button>
+                    <div class="user-dropdown" id="user-dropdown">
+                        <a href="/settings">Settings</a>
+                        <hr>
+                        <a href="#" onclick="logout()">Logout</a>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="navbar-end">
+                <div class="language-selector">
+                    <select id="language-select" onchange="changeLanguage(this.value)">
+                        <option value="en">EN</option>
+                        <option value="ru">RU</option>
+                        <option value="de">DE</option>
+                    </select>
+                </div>
+                <a href="/login" class="btn btn-outline">Login</a>
+            </div>
+            {% endif %}
+        </nav>
+        {% endblock %}
+
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+
+        {% block footer %}{% endblock %}
+    </div>
+
+    <!-- Toast notifications container -->
+    <div id="toast-container"></div>
+
+    <!-- Modal container -->
+    <div id="modal-container"></div>
+
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
