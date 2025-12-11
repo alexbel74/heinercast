@@ -10,27 +10,30 @@ from typing import Optional, Tuple
 from uuid import UUID
 
 import jwt
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 from cryptography.fernet import Fernet
 
 from app.config import get_settings
 
 settings = get_settings()
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 # ==================== Password Functions ====================
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
-    return pwd_context.hash(password)
+    # bcrypt has a 72-byte limit, truncate if necessary
+    password_bytes = password.encode('utf-8')[:72]
+    salt = _bcrypt.gensalt()
+    hashed = _bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    password_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
+    return _bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
 # ==================== JWT Functions ====================
