@@ -83,9 +83,13 @@ let currentPage = 1;
 
 async function loadProjects() {
     try {
-        const response = await api.get(`/api/projects?page=${currentPage}`);
-        const data = await response.json();
+        const result = await api.get(`/api/projects?page=${currentPage}`);
         
+        if (!result.ok || !result.data) {
+            return; // Error already shown by handleResponse
+        }
+        
+        const data = result.data;
         const grid = document.getElementById('projects-grid');
         const emptyState = document.getElementById('empty-state');
         
@@ -114,8 +118,7 @@ async function loadProjects() {
         `).join('');
         
     } catch (error) {
-        showToast('Failed to load projects', 'error');
-        console.error(error);
+        showError(error, 'Load projects');
     }
 }
 
@@ -140,19 +143,16 @@ async function createProject(event) {
     };
     
     try {
-        const response = await api.post('/api/projects', projectData);
+        const result = await api.post('/api/projects', projectData);
         
-        if (response.ok) {
-            const project = await response.json();
+        if (result.ok && result.data) {
             showToast('Project created successfully!', 'success');
             closeModal('create-project-modal');
-            window.location.href = `/projects/${project.id}`;
-        } else {
-            const error = await response.json();
-            showToast(error.message || 'Failed to create project', 'error');
+            window.location.href = `/projects/${result.data.id}`;
         }
+        // Error already shown by handleResponse
     } catch (error) {
-        showToast('Network error', 'error');
+        showError(error, 'Create project');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Create Project';

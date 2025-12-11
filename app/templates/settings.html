@@ -203,22 +203,25 @@ let providers = {};
 
 async function loadSettings() {
     try {
-        const response = await api.get('/api/users/settings');
-        settings = await response.json();
-        populateSettings();
+        const result = await api.get('/api/users/settings');
+        if (result.ok && result.data) {
+            settings = result.data;
+            populateSettings();
+        }
         
         // Load providers
-        const providersResponse = await api.get('/api/settings/providers');
-        const providersData = await providersResponse.json();
-        providers = providersData.providers.reduce((acc, p) => {
-            acc[p.id] = p;
-            return acc;
-        }, {});
+        const providersResult = await api.get('/api/settings/providers');
+        if (providersResult.ok && providersResult.data) {
+            providers = providersResult.data.providers.reduce((acc, p) => {
+                acc[p.id] = p;
+                return acc;
+            }, {});
+        }
         
         updateModelOptions();
         loadAPIKeys();
     } catch (error) {
-        showToast('Failed to load settings', 'error');
+        showError(error, 'Load settings');
     }
 }
 
@@ -262,20 +265,18 @@ async function saveProfile(event) {
     event.preventDefault();
     
     try {
-        const response = await api.put('/api/users/settings', {
+        const result = await api.put('/api/users/settings', {
             email: document.getElementById('profile-email').value,
             username: document.getElementById('profile-username').value,
             language: document.getElementById('profile-language').value
         });
         
-        if (response.ok) {
+        if (result.ok) {
             showToast('Profile saved!', 'success');
-        } else {
-            const error = await response.json();
-            showToast(error.message || 'Failed to save', 'error');
         }
+        // Error already shown by handleResponse
     } catch (error) {
-        showToast('Network error', 'error');
+        showError(error, 'Save profile');
     }
 }
 
@@ -283,20 +284,18 @@ async function changePassword(event) {
     event.preventDefault();
     
     try {
-        const response = await api.post('/api/auth/change-password', {
+        const result = await api.post('/api/auth/change-password', {
             current_password: document.getElementById('current-password').value,
             new_password: document.getElementById('new-password').value
         });
         
-        if (response.ok) {
+        if (result.ok) {
             showToast('Password changed!', 'success');
             document.getElementById('password-form').reset();
-        } else {
-            const error = await response.json();
-            showToast(error.message || 'Failed to change password', 'error');
         }
+        // Error already shown by handleResponse
     } catch (error) {
-        showToast('Network error', 'error');
+        showError(error, 'Change password');
     }
 }
 
@@ -314,14 +313,14 @@ async function saveLLMSettings(event) {
     }
     
     try {
-        const response = await api.put('/api/users/settings/llm', data);
-        if (response.ok) {
+        const result = await api.put('/api/users/settings/llm', data);
+        if (result.ok) {
             showToast('LLM settings saved!', 'success');
             document.getElementById('llm-api-key').value = '';
             loadSettings();
         }
     } catch (error) {
-        showToast('Failed to save', 'error');
+        showError(error, 'Save LLM settings');
     }
 }
 
@@ -335,16 +334,16 @@ async function saveElevenLabsSettings(event) {
     }
     
     try {
-        const response = await api.put('/api/users/settings/elevenlabs', {
+        const result = await api.put('/api/users/settings/elevenlabs', {
             elevenlabs_api_key: apiKey
         });
-        if (response.ok) {
+        if (result.ok) {
             showToast('ElevenLabs settings saved!', 'success');
             document.getElementById('elevenlabs-api-key').value = '';
             loadSettings();
         }
     } catch (error) {
-        showToast('Failed to save', 'error');
+        showError(error, 'Save ElevenLabs settings');
     }
 }
 
@@ -358,16 +357,16 @@ async function saveKieAISettings(event) {
     }
     
     try {
-        const response = await api.put('/api/users/settings/kieai', {
+        const result = await api.put('/api/users/settings/kieai', {
             kieai_api_key: apiKey
         });
-        if (response.ok) {
+        if (result.ok) {
             showToast('kie.ai settings saved!', 'success');
             document.getElementById('kieai-api-key').value = '';
             loadSettings();
         }
     } catch (error) {
-        showToast('Failed to save', 'error');
+        showError(error, 'Save kie.ai settings');
     }
 }
 
@@ -375,15 +374,15 @@ async function savePrompts(event) {
     event.preventDefault();
     
     try {
-        const response = await api.put('/api/users/settings/prompts', {
+        const result = await api.put('/api/users/settings/prompts', {
             ai_writer_prompt: document.getElementById('ai-writer-prompt').value,
             cover_prompt_template: document.getElementById('cover-prompt-template').value
         });
-        if (response.ok) {
+        if (result.ok) {
             showToast('Prompts saved!', 'success');
         }
     } catch (error) {
-        showToast('Failed to save', 'error');
+        showError(error, 'Save prompts');
     }
 }
 
@@ -391,28 +390,32 @@ async function resetPrompts() {
     if (!confirm('Reset prompts to default values?')) return;
     
     try {
-        const response = await api.post('/api/users/settings/prompts/reset');
-        if (response.ok) {
+        const result = await api.post('/api/users/settings/prompts/reset');
+        if (result.ok) {
             showToast('Prompts reset!', 'success');
             loadSettings();
         }
     } catch (error) {
-        showToast('Failed to reset', 'error');
+        showError(error, 'Reset prompts');
     }
 }
 
 async function loadAPIKeys() {
     try {
-        const response = await api.get('/api/users/api-keys');
-        const data = await response.json();
+        const result = await api.get('/api/users/api-keys');
         
+        if (!result.ok || !result.data) return;
+        
+        const data = result.data;
         const list = document.getElementById('api-keys-list');
-        if (data.items.length === 0) {
+        const items = data.items || [];
+        
+        if (items.length === 0) {
             list.innerHTML = '<p class="empty-text">No API keys yet</p>';
             return;
         }
         
-        list.innerHTML = data.items.map(key => `
+        list.innerHTML = items.map(key => `
             <div class="api-key-item">
                 <div class="api-key-info">
                     <strong>${escapeHtml(key.name)}</strong>
@@ -428,7 +431,7 @@ async function loadAPIKeys() {
             </div>
         `).join('');
     } catch (error) {
-        console.error('Failed to load API keys');
+        console.error('Failed to load API keys', error);
     }
 }
 
@@ -441,20 +444,20 @@ async function createAPIKey(event) {
     event.preventDefault();
     
     try {
-        const response = await api.post('/api/users/api-keys', {
+        const result = await api.post('/api/users/api-keys', {
             name: document.getElementById('apikey-name').value,
             expires_in_days: parseInt(document.getElementById('apikey-expires').value)
         });
         
-        if (response.ok) {
-            const data = await response.json();
+        if (result.ok && result.data) {
             closeModal('create-apikey-modal');
-            document.getElementById('new-api-key').textContent = data.api_key;
+            document.getElementById('new-api-key').textContent = result.data.api_key;
             document.getElementById('show-apikey-modal').classList.add('active');
             loadAPIKeys();
         }
+        // Error already shown by handleResponse
     } catch (error) {
-        showToast('Failed to create API key', 'error');
+        showError(error, 'Create API key');
     }
 }
 
@@ -468,13 +471,13 @@ async function revokeAPIKey(keyId) {
     if (!confirm('Revoke this API key? This cannot be undone.')) return;
     
     try {
-        const response = await api.delete(`/api/users/api-keys/${keyId}`);
-        if (response.ok) {
+        const result = await api.delete(`/api/users/api-keys/${keyId}`);
+        if (result.ok) {
             showToast('API key revoked', 'success');
             loadAPIKeys();
         }
     } catch (error) {
-        showToast('Failed to revoke', 'error');
+        showError(error, 'Revoke API key');
     }
 }
 
