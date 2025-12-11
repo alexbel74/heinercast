@@ -77,24 +77,39 @@
     <script src="/static/js/translations.js"></script>
     <script src="/static/js/app.js"></script>
     <script>
-        // Set initial language from server or localStorage
+        // Synchronize language between server and client
         (function() {
             const serverLang = '{{ language or "en" }}';
-            const savedLang = localStorage.getItem('language');
+            const storedLang = localStorage.getItem('language');
+            const cookieLang = document.cookie.split('; ')
+                .find(row => row.startsWith('language='))
+                ?.split('=')[1];
             
-            if (savedLang && savedLang !== serverLang) {
-                // localStorage takes priority, update selector
-                const select = document.getElementById('language-select');
-                if (select) select.value = savedLang;
-            } else if (!savedLang && serverLang) {
-                // Save server language to localStorage
-                localStorage.setItem('language', serverLang);
+            // Determine the authoritative language
+            // Priority: localStorage > cookie > server
+            let finalLang = storedLang || cookieLang || serverLang;
+            
+            // Validate language
+            if (!['en', 'ru', 'de'].includes(finalLang)) {
+                finalLang = 'en';
             }
             
-            // Set language for translations
-            if (typeof setLanguage === 'function') {
-                setLanguage(savedLang || serverLang);
+            // Sync all sources
+            localStorage.setItem('language', finalLang);
+            document.cookie = `language=${finalLang};path=/;max-age=31536000`;
+            
+            // Update selector to match
+            const select = document.getElementById('language-select');
+            if (select && select.value !== finalLang) {
+                select.value = finalLang;
             }
+            
+            // Apply to translations module (don't reload, just set)
+            if (typeof currentLang !== 'undefined') {
+                currentLang = finalLang;
+            }
+            
+            console.log('[Language Init] server:', serverLang, 'stored:', storedLang, 'final:', finalLang);
         })();
     </script>
     {% block scripts %}{% endblock %}
