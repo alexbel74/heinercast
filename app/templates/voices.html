@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Voice Library - HeinerCast{% endblock %}
+
+{% block content %}
+<div class="voices-page">
+    <div class="page-header">
+        <h1>Voice Library</h1>
+        <button class="btn btn-primary" onclick="showAddVoiceModal()">
+            + Add Voice
+        </button>
+    </div>
+    
+    <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Search voices..." 
+               oninput="searchVoices(this.value)">
+        <label class="checkbox-label">
+            <input type="checkbox" id="favorites-only" onchange="loadVoices()">
+            <span>Favorites only</span>
+        </label>
+    </div>
+    
+    <div class="voices-grid" id="voices-grid">
+        <div class="loading-spinner">Loading voices...</div>
+    </div>
+    
+    <div class="empty-state" id="empty-state" style="display: none;">
+        <div class="empty-icon">🎙️</div>
+        <h2>No Voices Yet</h2>
+        <p>Add voices to your library to use them in your projects</p>
+        <button class="btn btn-primary" onclick="showAddVoiceModal()">
+            Add Your First Voice
+        </button>
+    </div>
+</div>
+
+<!-- Add Voice Modal -->
+<div class="modal" id="add-voice-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add Voice</h2>
+            <button class="modal-close" onclick="closeModal('add-voice-modal')">&times;</button>
+        </div>
+        <form id="add-voice-form" onsubmit="addVoice(event)">
+            <div class="form-group">
+                <label for="voice-name">Name in Library *</label>
+                <input type="text" id="voice-name" required maxlength="100"
+                       placeholder="e.g., Narrator, Main Character">
+            </div>
+            <div class="form-group">
+                <label for="voice-elevenlabs-name">ElevenLabs Voice Name *</label>
+                <input type="text" id="voice-elevenlabs-name" required maxlength="100"
+                       placeholder="e.g., Titan – Young Epic Storyteller">
+            </div>
+            <div class="form-group">
+                <label for="voice-id">ElevenLabs Voice ID *</label>
+                <input type="text" id="voice-id" required maxlength="50"
+                       placeholder="e.g., f5KRUAmxOzuhrrp8V3zv">
+                <span class="form-hint">Find this in your ElevenLabs dashboard</span>
+            </div>
+            <div class="form-group">
+                <label for="voice-description">Description (optional)</label>
+                <textarea id="voice-description" rows="2"
+                          placeholder="Notes about this voice..."></textarea>
+            </div>
+            <label class="checkbox-label">
+                <input type="checkbox" id="voice-favorite">
+                <span>Mark as favorite</span>
+            </label>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('add-voice-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Voice</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Import from ElevenLabs Modal -->
+<div class="modal" id="import-voice-modal">
+    <div class="modal-content modal-lg">
+        <div class="modal-header">
+            <h2>Import from ElevenLabs</h2>
+            <button class="modal-close" onclick="closeModal('import-voice-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="elevenlabs-voices">
+                <div class="loading-spinner">Loading available voices...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Voice Modal -->
+<div class="modal" id="test-voice-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Test Voice</h2>
+            <button class="modal-close" onclick="closeModal('test-voice-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Test Text</label>
+                <textarea id="test-text" rows="3">Hello, this is a voice test. I can read any text you want to hear.</textarea>
+            </div>
+            <div class="test-result" id="test-result" style="display: none;">
+                <audio id="test-audio" controls></audio>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('test-voice-modal')">Close</button>
+            <button class="btn btn-primary" id="test-btn" onclick="testVoice()">
+                ▶️ Test Voice
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let voices = [];
+let currentTestVoiceId = null;
+
+async function loadVoices() {
+    const favoritesOnly = document.getElementById('favorites-only').checked;
+    const search = document.getElementById('search-input').value;
+    
+    try {
+        let url = '/api/voices?';
+        if (favoritesOnly) url += 'favorites_only=true&';
+        if (search) url += `search=${encodeURIComponent(search)}`;
+        
+        const response = await api.get(url);
+        voices = await response.json();
+        renderVoices();
+    } catch (error) {
+        showToast('Failed to load voices', 'error');
+    }
+}
+
+function searchVoices(query) {
+    // Debounce search
+    clearTimeout(window.searchTimeout);
+    window.searchTimeout = setTimeout(() => loadVoices(), 300);
+}
+
+function renderVoices() {
+    const grid = document.getElementById('voices-grid');
+    const emptyState = document.getElementById('empty-state');
+    
+    if (voices.length === 0) {
+        grid.style.display = 'none';
+        emptyState.style.display = 'flex';
+        return;
+    }
+    
+    grid.style.display = 'grid';
+    emptyState.style.display = 'none';
+    
+    grid.innerHTML = voices.map(voice => `
+        <div class="voice-card">
+            <div class="voice-header">
+                <span class="voice-favorite ${voice.is_favorite ? 'active' : ''}" 
+                      onclick="toggleFavorite('${voice.id}')">
+                    ${voice.is_favorite ? '⭐' : '☆'}
+                </span>
+                <div class="voice-actions">
+                    <button class="btn-icon" onclick="showTestModal('${voice.id}')" title="Test">▶️</button>
+                    <button class="btn-icon" onclick="editVoice('${voice.id}')" title="Edit">✏️</button>
+                    <button class="btn-icon" onclick="deleteVoice('${voice.id}')" title="Delete">🗑️</button>
+                </div>
+            </div>
+            <h3 class="voice-name">${escapeHtml(voice.name)}</h3>
+            <p class="voice-elevenlabs">${escapeHtml(voice.elevenlabs_name)}</p>
+            <p class="voice-id">ID: ${escapeHtml(voice.elevenlabs_voice_id)}</p>
+            ${voice.description ? `<p class="voice-description">${escapeHtml(voice.description)}</p>` : ''}
+        </div>
+    `).join('');
+}
+
+function showAddVoiceModal() {
+    document.getElementById('add-voice-form').reset();
+    document.getElementById('add-voice-modal').classList.add('active');
+}
+
+async function addVoice(event) {
+    event.preventDefault();
+    
+    const data = {
+        name: document.getElementById('voice-name').value,
+        elevenlabs_name: document.getElementById('voice-elevenlabs-name').value,
+        elevenlabs_voice_id: document.getElementById('voice-id').value,
+        description: document.getElementById('voice-description').value || null,
+        is_favorite: document.getElementById('voice-favorite').checked
+    };
+    
+    try {
+        const response = await api.post('/api/voices', data);
+        if (response.ok) {
+            showToast('Voice added!', 'success');
+            closeModal('add-voice-modal');
+            loadVoices();
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to add voice', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function toggleFavorite(voiceId) {
+    const voice = voices.find(v => v.id === voiceId);
+    if (!voice) return;
+    
+    try {
+        const response = await api.put(`/api/voices/${voiceId}`, {
+            is_favorite: !voice.is_favorite
+        });
+        if (response.ok) {
+            loadVoices();
+        }
+    } catch (error) {
+        showToast('Failed to update', 'error');
+    }
+}
+
+async function deleteVoice(voiceId) {
+    if (!confirm('Delete this voice from your library?')) return;
+    
+    try {
+        const response = await api.delete(`/api/voices/${voiceId}`);
+        if (response.ok) {
+            showToast('Voice deleted', 'success');
+            loadVoices();
+        }
+    } catch (error) {
+        showToast('Failed to delete voice', 'error');
+    }
+}
+
+function showTestModal(voiceId) {
+    currentTestVoiceId = voiceId;
+    document.getElementById('test-result').style.display = 'none';
+    document.getElementById('test-voice-modal').classList.add('active');
+}
+
+async function testVoice() {
+    const btn = document.getElementById('test-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    
+    const text = document.getElementById('test-text').value;
+    const voice = voices.find(v => v.id === currentTestVoiceId);
+    
+    try {
+        const response = await api.post('/api/voices/test', {
+            voice_id: voice.elevenlabs_voice_id,
+            text: text
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('test-audio').src = data.audio_url;
+            document.getElementById('test-result').style.display = 'block';
+            document.getElementById('test-audio').play();
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to test voice', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '▶️ Test Voice';
+    }
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', loadVoices);
+</script>
+{% endblock %}

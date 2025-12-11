@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - HeinerCast{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <h1>Settings</h1>
+    
+    <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="profile">Profile</button>
+        <button class="settings-tab" data-tab="llm">LLM Provider</button>
+        <button class="settings-tab" data-tab="elevenlabs">ElevenLabs</button>
+        <button class="settings-tab" data-tab="covers">Covers</button>
+        <button class="settings-tab" data-tab="prompts">AI Prompts</button>
+        <button class="settings-tab" data-tab="apikeys">API Keys</button>
+    </div>
+    
+    <!-- Profile Tab -->
+    <div class="settings-content active" id="tab-profile">
+        <div class="settings-card">
+            <h2>Profile Settings</h2>
+            <form id="profile-form" onsubmit="saveProfile(event)">
+                <div class="form-group">
+                    <label for="profile-email">Email</label>
+                    <input type="email" id="profile-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="profile-username">Username</label>
+                    <input type="text" id="profile-username" required pattern="^[a-zA-Z0-9_]+$">
+                </div>
+                <div class="form-group">
+                    <label for="profile-language">Language</label>
+                    <select id="profile-language">
+                        <option value="en">English</option>
+                        <option value="ru">Русский</option>
+                        <option value="de">Deutsch</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </form>
+        </div>
+        
+        <div class="settings-card">
+            <h2>Change Password</h2>
+            <form id="password-form" onsubmit="changePassword(event)">
+                <div class="form-group">
+                    <label for="current-password">Current Password</label>
+                    <input type="password" id="current-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password</label>
+                    <input type="password" id="new-password" required minlength="8">
+                </div>
+                <button type="submit" class="btn btn-outline">Change Password</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- LLM Tab -->
+    <div class="settings-content" id="tab-llm">
+        <div class="settings-card">
+            <h2>LLM Provider Settings</h2>
+            <p class="settings-description">Configure the AI provider for script generation</p>
+            <form id="llm-form" onsubmit="saveLLMSettings(event)">
+                <div class="form-group">
+                    <label for="llm-provider">Provider</label>
+                    <select id="llm-provider" onchange="updateModelOptions()">
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="polza">Polza.ai</option>
+                        <option value="openai">OpenAI</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="llm-api-key">API Key</label>
+                    <input type="password" id="llm-api-key" placeholder="Enter your API key">
+                    <span class="form-hint" id="llm-key-status"></span>
+                </div>
+                <div class="form-group">
+                    <label for="llm-model">Model</label>
+                    <select id="llm-model">
+                        <!-- Options loaded dynamically -->
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Save LLM Settings</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- ElevenLabs Tab -->
+    <div class="settings-content" id="tab-elevenlabs">
+        <div class="settings-card">
+            <h2>ElevenLabs Settings</h2>
+            <p class="settings-description">Configure ElevenLabs for voice generation</p>
+            <form id="elevenlabs-form" onsubmit="saveElevenLabsSettings(event)">
+                <div class="form-group">
+                    <label for="elevenlabs-api-key">API Key</label>
+                    <input type="password" id="elevenlabs-api-key" placeholder="Enter your ElevenLabs API key">
+                    <span class="form-hint" id="elevenlabs-key-status"></span>
+                </div>
+                <button type="submit" class="btn btn-primary">Save ElevenLabs Settings</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Covers Tab -->
+    <div class="settings-content" id="tab-covers">
+        <div class="settings-card">
+            <h2>kie.ai Settings</h2>
+            <p class="settings-description">Configure kie.ai for cover image generation</p>
+            <form id="kieai-form" onsubmit="saveKieAISettings(event)">
+                <div class="form-group">
+                    <label for="kieai-api-key">API Key</label>
+                    <input type="password" id="kieai-api-key" placeholder="Enter your kie.ai API key">
+                    <span class="form-hint" id="kieai-key-status"></span>
+                </div>
+                <button type="submit" class="btn btn-primary">Save kie.ai Settings</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Prompts Tab -->
+    <div class="settings-content" id="tab-prompts">
+        <div class="settings-card">
+            <h2>AI Writer Prompt</h2>
+            <p class="settings-description">Customize the system prompt for script generation</p>
+            <form id="prompts-form" onsubmit="savePrompts(event)">
+                <div class="form-group">
+                    <label for="ai-writer-prompt">System Prompt</label>
+                    <textarea id="ai-writer-prompt" rows="15" class="code-textarea"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="cover-prompt-template">Cover Prompt Template</label>
+                    <textarea id="cover-prompt-template" rows="8" class="code-textarea"></textarea>
+                    <span class="form-hint">Use {title}, {genre_tone}, {description} as placeholders</span>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline" onclick="resetPrompts()">Reset to Defaults</button>
+                    <button type="submit" class="btn btn-primary">Save Prompts</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- API Keys Tab -->
+    <div class="settings-content" id="tab-apikeys">
+        <div class="settings-card">
+            <h2>API Keys</h2>
+            <p class="settings-description">Manage API keys for programmatic access</p>
+            <button class="btn btn-primary" onclick="showCreateAPIKeyModal()">Create New API Key</button>
+            
+            <div class="api-keys-list" id="api-keys-list">
+                <!-- API keys will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create API Key Modal -->
+<div class="modal" id="create-apikey-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Create API Key</h2>
+            <button class="modal-close" onclick="closeModal('create-apikey-modal')">&times;</button>
+        </div>
+        <form id="create-apikey-form" onsubmit="createAPIKey(event)">
+            <div class="form-group">
+                <label for="apikey-name">Name</label>
+                <input type="text" id="apikey-name" required maxlength="100"
+                       placeholder="e.g., My Integration">
+            </div>
+            <div class="form-group">
+                <label for="apikey-expires">Expires in (days)</label>
+                <input type="number" id="apikey-expires" value="365" min="1" max="3650">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('create-apikey-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Key</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Show API Key Modal -->
+<div class="modal" id="show-apikey-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>API Key Created</h2>
+            <button class="modal-close" onclick="closeModal('show-apikey-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p class="warning-text">⚠️ Copy this key now. You won't be able to see it again!</p>
+            <div class="api-key-display" id="new-api-key"></div>
+            <button class="btn btn-outline" onclick="copyAPIKey()">📋 Copy to Clipboard</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let settings = null;
+let providers = {};
+
+async function loadSettings() {
+    try {
+        const response = await api.get('/api/users/settings');
+        settings = await response.json();
+        populateSettings();
+        
+        // Load providers
+        const providersResponse = await api.get('/api/settings/providers');
+        const providersData = await providersResponse.json();
+        providers = providersData.providers.reduce((acc, p) => {
+            acc[p.id] = p;
+            return acc;
+        }, {});
+        
+        updateModelOptions();
+        loadAPIKeys();
+    } catch (error) {
+        showToast('Failed to load settings', 'error');
+    }
+}
+
+function populateSettings() {
+    // Profile
+    document.getElementById('profile-email').value = settings.email;
+    document.getElementById('profile-username').value = settings.username;
+    document.getElementById('profile-language').value = settings.language;
+    
+    // LLM
+    document.getElementById('llm-provider').value = settings.llm_provider;
+    document.getElementById('llm-key-status').textContent = settings.has_llm_api_key ? '✅ Key configured' : '⚠️ No key set';
+    if (settings.llm_model) {
+        document.getElementById('llm-model').value = settings.llm_model;
+    }
+    
+    // ElevenLabs
+    document.getElementById('elevenlabs-key-status').textContent = settings.has_elevenlabs_api_key ? '✅ Key configured' : '⚠️ No key set';
+    
+    // kie.ai
+    document.getElementById('kieai-key-status').textContent = settings.has_kieai_api_key ? '✅ Key configured' : '⚠️ No key set';
+    
+    // Prompts
+    document.getElementById('ai-writer-prompt').value = settings.ai_writer_prompt;
+    document.getElementById('cover-prompt-template').value = settings.cover_prompt_template;
+}
+
+function updateModelOptions() {
+    const provider = document.getElementById('llm-provider').value;
+    const select = document.getElementById('llm-model');
+    const models = providers[provider]?.models || [];
+    
+    select.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+    
+    if (settings && settings.llm_model && models.includes(settings.llm_model)) {
+        select.value = settings.llm_model;
+    }
+}
+
+async function saveProfile(event) {
+    event.preventDefault();
+    
+    try {
+        const response = await api.put('/api/users/settings', {
+            email: document.getElementById('profile-email').value,
+            username: document.getElementById('profile-username').value,
+            language: document.getElementById('profile-language').value
+        });
+        
+        if (response.ok) {
+            showToast('Profile saved!', 'success');
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to save', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function changePassword(event) {
+    event.preventDefault();
+    
+    try {
+        const response = await api.post('/api/auth/change-password', {
+            current_password: document.getElementById('current-password').value,
+            new_password: document.getElementById('new-password').value
+        });
+        
+        if (response.ok) {
+            showToast('Password changed!', 'success');
+            document.getElementById('password-form').reset();
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to change password', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function saveLLMSettings(event) {
+    event.preventDefault();
+    
+    const data = {
+        llm_provider: document.getElementById('llm-provider').value,
+        llm_model: document.getElementById('llm-model').value
+    };
+    
+    const apiKey = document.getElementById('llm-api-key').value;
+    if (apiKey) {
+        data.llm_api_key = apiKey;
+    }
+    
+    try {
+        const response = await api.put('/api/users/settings/llm', data);
+        if (response.ok) {
+            showToast('LLM settings saved!', 'success');
+            document.getElementById('llm-api-key').value = '';
+            loadSettings();
+        }
+    } catch (error) {
+        showToast('Failed to save', 'error');
+    }
+}
+
+async function saveElevenLabsSettings(event) {
+    event.preventDefault();
+    
+    const apiKey = document.getElementById('elevenlabs-api-key').value;
+    if (!apiKey) {
+        showToast('Please enter an API key', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await api.put('/api/users/settings/elevenlabs', {
+            elevenlabs_api_key: apiKey
+        });
+        if (response.ok) {
+            showToast('ElevenLabs settings saved!', 'success');
+            document.getElementById('elevenlabs-api-key').value = '';
+            loadSettings();
+        }
+    } catch (error) {
+        showToast('Failed to save', 'error');
+    }
+}
+
+async function saveKieAISettings(event) {
+    event.preventDefault();
+    
+    const apiKey = document.getElementById('kieai-api-key').value;
+    if (!apiKey) {
+        showToast('Please enter an API key', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await api.put('/api/users/settings/kieai', {
+            kieai_api_key: apiKey
+        });
+        if (response.ok) {
+            showToast('kie.ai settings saved!', 'success');
+            document.getElementById('kieai-api-key').value = '';
+            loadSettings();
+        }
+    } catch (error) {
+        showToast('Failed to save', 'error');
+    }
+}
+
+async function savePrompts(event) {
+    event.preventDefault();
+    
+    try {
+        const response = await api.put('/api/users/settings/prompts', {
+            ai_writer_prompt: document.getElementById('ai-writer-prompt').value,
+            cover_prompt_template: document.getElementById('cover-prompt-template').value
+        });
+        if (response.ok) {
+            showToast('Prompts saved!', 'success');
+        }
+    } catch (error) {
+        showToast('Failed to save', 'error');
+    }
+}
+
+async function resetPrompts() {
+    if (!confirm('Reset prompts to default values?')) return;
+    
+    try {
+        const response = await api.post('/api/users/settings/prompts/reset');
+        if (response.ok) {
+            showToast('Prompts reset!', 'success');
+            loadSettings();
+        }
+    } catch (error) {
+        showToast('Failed to reset', 'error');
+    }
+}
+
+async function loadAPIKeys() {
+    try {
+        const response = await api.get('/api/users/api-keys');
+        const data = await response.json();
+        
+        const list = document.getElementById('api-keys-list');
+        if (data.items.length === 0) {
+            list.innerHTML = '<p class="empty-text">No API keys yet</p>';
+            return;
+        }
+        
+        list.innerHTML = data.items.map(key => `
+            <div class="api-key-item">
+                <div class="api-key-info">
+                    <strong>${escapeHtml(key.name)}</strong>
+                    <span class="api-key-meta">
+                        Created: ${formatDate(key.created_at)}
+                        ${key.last_used_at ? ` • Last used: ${formatDate(key.last_used_at)}` : ''}
+                        ${key.expires_at ? ` • Expires: ${formatDate(key.expires_at)}` : ''}
+                    </span>
+                </div>
+                <button class="btn btn-danger-outline btn-sm" onclick="revokeAPIKey('${key.id}')">
+                    Revoke
+                </button>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Failed to load API keys');
+    }
+}
+
+function showCreateAPIKeyModal() {
+    document.getElementById('create-apikey-form').reset();
+    document.getElementById('create-apikey-modal').classList.add('active');
+}
+
+async function createAPIKey(event) {
+    event.preventDefault();
+    
+    try {
+        const response = await api.post('/api/users/api-keys', {
+            name: document.getElementById('apikey-name').value,
+            expires_in_days: parseInt(document.getElementById('apikey-expires').value)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            closeModal('create-apikey-modal');
+            document.getElementById('new-api-key').textContent = data.api_key;
+            document.getElementById('show-apikey-modal').classList.add('active');
+            loadAPIKeys();
+        }
+    } catch (error) {
+        showToast('Failed to create API key', 'error');
+    }
+}
+
+function copyAPIKey() {
+    const key = document.getElementById('new-api-key').textContent;
+    navigator.clipboard.writeText(key);
+    showToast('API key copied!', 'success');
+}
+
+async function revokeAPIKey(keyId) {
+    if (!confirm('Revoke this API key? This cannot be undone.')) return;
+    
+    try {
+        const response = await api.delete(`/api/users/api-keys/${keyId}`);
+        if (response.ok) {
+            showToast('API key revoked', 'success');
+            loadAPIKeys();
+        }
+    } catch (error) {
+        showToast('Failed to revoke', 'error');
+    }
+}
+
+// Tab handling
+document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.settings-content').forEach(c => c.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    });
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', loadSettings);
+</script>
+{% endblock %}
