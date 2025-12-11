@@ -9,7 +9,10 @@ from typing import Optional, List, Dict, Any, Tuple
 
 import httpx
 
-from app.config import get_settings, ELEVENLABS_BASE_URL, ELEVENLABS_ENDPOINTS, AUDIO_SETTINGS
+from app.config import (
+    get_settings, ELEVENLABS_BASE_URL, ELEVENLABS_ENDPOINTS, 
+    AUDIO_SETTINGS, ELEVENLABS_MODEL_ID
+)
 from app.core.exceptions import ElevenLabsError, MissingAPIKeyError
 from app.core.security import decrypt_api_key
 from app.models.user import User
@@ -40,46 +43,67 @@ class ElevenLabsService:
         
         return self._api_key
     
+    def _get_headers(self) -> Dict[str, str]:
+        """Get headers for ElevenLabs API requests"""
+        return {
+            "xi-api-key": self.api_key,
+            "Content-Type": "application/json"
+        }
+    
     async def text_to_dialogue(
         self,
         lines: List[Dict[str, Any]],
-        model_id: str = "eleven_multilingual_v2"
+        model_id: str = ELEVENLABS_MODEL_ID
     ) -> Tuple[bytes, Dict[str, Any]]:
         """
         Generate dialogue audio from script lines.
         
         Args:
             lines: List of script lines with speaker, voice_id, text
-            model_id: ElevenLabs model to use
+            model_id: ElevenLabs model to use (default: eleven_v3)
         
         Returns:
             Tuple of (audio_bytes, timestamps_data)
         """
         url = f"{ELEVENLABS_BASE_URL}{ELEVENLABS_ENDPOINTS['text_to_dialogue']}"
         
-        # Prepare inputs for ElevenLabs
+        # Prepare inputs for ElevenLabs API
+        # Format: [{"text": "...", "voice_id": "..."}, ...]
         inputs = []
         for line in lines:
-            inputs.append({
+            input_item = {
                 "text": line["text"],
                 "voice_id": line["voice_id"]
-            })
+            }
+            inputs.append(input_item)
         
+        # Request body - ВАЖНО: model_id обязателен!
         body = {
             "inputs": inputs,
-            "model_id": model_id,
-            "output_format": "mp3_44100_128"
+            "model_id": model_id  # eleven_v3
         }
         
-        headers = {
-            "xi-api-key": self.api_key,
-            "Content-Type": "application/json"
-        }
+        logger.info(f"ElevenLabs text_to_dialogue: {len(inputs)} lines, model={model_id}")
+        logger.debug(f"Request body: {json.dumps(body, ensure_ascii=False)[:500]}...")
         
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(url, json=body, headers=headers)
-                response.raise_for_status()
+                response = await client.post(
+                    url, 
+                    json=body, 
+                    headers=self._get_headers()
+                )
+                
+                # Log response status
+                logger.info(f"ElevenLabs response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    error_text = response.text
+                    logger.error(f"ElevenLabs API error: {response.status_code} - {error_text}")
+                    raise ElevenLabsError(
+                        f"API returned {response.status_code}",
+                        details=self._parse_error(error_text)
+                    )
                 
                 data = response.json()
                 
@@ -87,27 +111,53 @@ class ElevenLabsService:
                 audio_base64 = data.get("audio_base64", "")
                 audio_bytes = base64.b64decode(audio_base64) if audio_base64 else b""
                 
+                if not audio_bytes:
+                    logger.warning("ElevenLabs returned empty audio")
+                
                 timestamps = {
                     "voice_segments": data.get("voice_segments", []),
                     "alignment": data.get("alignment", {})
                 }
                 
+                logger.info(f"ElevenLabs audio generated: {len(audio_bytes)} bytes")
+                
                 return audio_bytes, timestamps
                 
         except httpx.HTTPStatusError as e:
-            logger.error(f"ElevenLabs API error: {e.response.status_code} - {e.response.text}")
+            error_details = self._parse_error(e.response.text)
+            logger.error(f"ElevenLabs API error: {e.response.status_code} - {error_details}")
             raise ElevenLabsError(
                 f"API returned {e.response.status_code}",
-                details=e.response.text
+                details=error_details
             )
         except httpx.RequestError as e:
             logger.error(f"ElevenLabs request error: {e}")
-            raise ElevenLabsError(str(e))
+            raise ElevenLabsError(f"Request failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"ElevenLabs unexpected error: {e}")
+            raise ElevenLabsError(f"Unexpected error: {str(e)}")
+    
+    def _parse_error(self, error_text: str) -> str:
+        """Parse error response and return user-friendly message"""
+        try:
+            error_data = json.loads(error_text)
+            if "detail" in error_data:
+                detail = error_data["detail"]
+                if isinstance(detail, dict):
+                    return detail.get("message", str(detail))
+                return str(detail)
+            if "error" in error_data:
+                return error_data["error"]
+            if "message" in error_data:
+                return error_data["message"]
+            return error_text
+        except json.JSONDecodeError:
+            return error_text
     
     async def generate_dialogue_in_parts(
         self,
         lines: List[Dict[str, Any]],
-        model_id: str = "eleven_multilingual_v2"
+        model_id: str = ELEVENLABS_MODEL_ID
     ) -> Tuple[List[bytes], List[Dict[str, Any]]]:
         """
         Generate dialogue in parts if script is too long.
@@ -117,10 +167,13 @@ class ElevenLabsService:
         """
         parts = self._split_into_parts(lines)
         
+        logger.info(f"Generating dialogue in {len(parts)} part(s)")
+        
         audio_parts = []
         timestamps_parts = []
         
-        for part in parts:
+        for i, part in enumerate(parts):
+            logger.info(f"Processing part {i+1}/{len(parts)} ({len(part)} lines)")
             audio_bytes, timestamps = await self.text_to_dialogue(part, model_id)
             audio_parts.append(audio_bytes)
             timestamps_parts.append(timestamps)
@@ -190,27 +243,30 @@ class ElevenLabsService:
             "prompt_influence": prompt_influence
         }
         
-        headers = {
-            "xi-api-key": self.api_key,
-            "Content-Type": "application/json"
-        }
+        logger.info(f"Generating sound effect: {prompt[:50]}...")
         
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(url, json=body, headers=headers)
-                response.raise_for_status()
+                response = await client.post(
+                    url, 
+                    json=body, 
+                    headers=self._get_headers()
+                )
                 
+                if response.status_code != 200:
+                    error_details = self._parse_error(response.text)
+                    logger.error(f"Sound generation error: {response.status_code} - {error_details}")
+                    raise ElevenLabsError(
+                        f"Sound generation failed: {response.status_code}",
+                        details=error_details
+                    )
+                
+                logger.info(f"Sound effect generated: {len(response.content)} bytes")
                 return response.content
                 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"ElevenLabs sound generation error: {e.response.status_code}")
-            raise ElevenLabsError(
-                f"Sound generation failed: {e.response.status_code}",
-                details=e.response.text
-            )
         except httpx.RequestError as e:
             logger.error(f"ElevenLabs request error: {e}")
-            raise ElevenLabsError(str(e))
+            raise ElevenLabsError(f"Request failed: {str(e)}")
     
     async def create_music_plan(
         self,
@@ -234,27 +290,31 @@ class ElevenLabsService:
             "music_length_ms": duration_ms
         }
         
-        headers = {
-            "xi-api-key": self.api_key,
-            "Content-Type": "application/json"
-        }
+        logger.info(f"Creating music plan: {prompt[:50]}..., duration={duration_ms}ms")
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, json=body, headers=headers)
-                response.raise_for_status()
+                response = await client.post(
+                    url, 
+                    json=body, 
+                    headers=self._get_headers()
+                )
                 
-                return response.json()
+                if response.status_code != 200:
+                    error_details = self._parse_error(response.text)
+                    logger.error(f"Music plan error: {response.status_code} - {error_details}")
+                    raise ElevenLabsError(
+                        f"Music plan creation failed: {response.status_code}",
+                        details=error_details
+                    )
                 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"ElevenLabs music plan error: {e.response.status_code}")
-            raise ElevenLabsError(
-                f"Music plan creation failed: {e.response.status_code}",
-                details=e.response.text
-            )
+                plan = response.json()
+                logger.info(f"Music plan created successfully")
+                return plan
+                
         except httpx.RequestError as e:
             logger.error(f"ElevenLabs request error: {e}")
-            raise ElevenLabsError(str(e))
+            raise ElevenLabsError(f"Request failed: {str(e)}")
     
     async def generate_music(
         self,
@@ -278,27 +338,30 @@ class ElevenLabsService:
             "force_instrumental": force_instrumental
         }
         
-        headers = {
-            "xi-api-key": self.api_key,
-            "Content-Type": "application/json"
-        }
+        logger.info(f"Generating music, instrumental={force_instrumental}")
         
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(url, json=body, headers=headers)
-                response.raise_for_status()
+                response = await client.post(
+                    url, 
+                    json=body, 
+                    headers=self._get_headers()
+                )
                 
+                if response.status_code != 200:
+                    error_details = self._parse_error(response.text)
+                    logger.error(f"Music generation error: {response.status_code} - {error_details}")
+                    raise ElevenLabsError(
+                        f"Music generation failed: {response.status_code}",
+                        details=error_details
+                    )
+                
+                logger.info(f"Music generated: {len(response.content)} bytes")
                 return response.content
                 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"ElevenLabs music generation error: {e.response.status_code}")
-            raise ElevenLabsError(
-                f"Music generation failed: {e.response.status_code}",
-                details=e.response.text
-            )
         except httpx.RequestError as e:
             logger.error(f"ElevenLabs request error: {e}")
-            raise ElevenLabsError(str(e))
+            raise ElevenLabsError(f"Request failed: {str(e)}")
     
     async def get_voices(self) -> List[Dict[str, Any]]:
         """
@@ -309,32 +372,36 @@ class ElevenLabsService:
         """
         url = f"{ELEVENLABS_BASE_URL}{ELEVENLABS_ENDPOINTS['voices']}"
         
-        headers = {
-            "xi-api-key": self.api_key
-        }
+        logger.info("Fetching available voices from ElevenLabs")
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url, headers=headers)
-                response.raise_for_status()
+                response = await client.get(
+                    url, 
+                    headers=self._get_headers()
+                )
+                
+                if response.status_code != 200:
+                    error_details = self._parse_error(response.text)
+                    logger.error(f"Voices fetch error: {response.status_code} - {error_details}")
+                    raise ElevenLabsError(
+                        f"Failed to get voices: {response.status_code}",
+                        details=error_details
+                    )
                 
                 data = response.json()
-                return data.get("voices", [])
+                voices = data.get("voices", [])
+                logger.info(f"Found {len(voices)} voices")
+                return voices
                 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"ElevenLabs voices error: {e.response.status_code}")
-            raise ElevenLabsError(
-                f"Failed to get voices: {e.response.status_code}",
-                details=e.response.text
-            )
         except httpx.RequestError as e:
             logger.error(f"ElevenLabs request error: {e}")
-            raise ElevenLabsError(str(e))
+            raise ElevenLabsError(f"Request failed: {str(e)}")
     
     async def test_voice(
         self,
         voice_id: str,
-        text: str = "Hello, this is a voice test."
+        text: str = "Привет! Это тест голоса. Hello! This is a voice test."
     ) -> bytes:
         """
         Test a voice with a short text.
@@ -346,7 +413,25 @@ class ElevenLabsService:
         Returns:
             Audio bytes
         """
+        logger.info(f"Testing voice: {voice_id}")
+        
         # Use text-to-dialogue with a single line
         lines = [{"text": text, "voice_id": voice_id}]
-        audio_bytes, _ = await self.text_to_dialogue(lines)
+        audio_bytes, _ = await self.text_to_dialogue(lines, model_id=ELEVENLABS_MODEL_ID)
         return audio_bytes
+    
+    async def validate_api_key(self) -> bool:
+        """
+        Validate that the API key is working.
+        
+        Returns:
+            True if valid, raises exception otherwise
+        """
+        try:
+            # Try to get user info or voices list
+            await self.get_voices()
+            return True
+        except ElevenLabsError as e:
+            if "401" in str(e) or "Unauthorized" in str(e):
+                raise ElevenLabsError("Invalid API key", details="Please check your ElevenLabs API key")
+            raise

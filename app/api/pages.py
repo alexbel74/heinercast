@@ -4,7 +4,7 @@ Web Pages Router - HTML pages
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -17,17 +17,48 @@ router = APIRouter()
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=templates_dir) if os.path.exists(templates_dir) else None
 
+# Default language
+DEFAULT_LANGUAGE = "en"
+
+
+def get_language(request: Request, user: Optional[User] = None) -> str:
+    """Get language from user, cookie, or default"""
+    # 1. From logged-in user
+    if user and hasattr(user, 'language') and user.language:
+        return user.language
+    
+    # 2. From cookie
+    lang_cookie = request.cookies.get('language')
+    if lang_cookie and lang_cookie in ['en', 'ru', 'de']:
+        return lang_cookie
+    
+    # 3. From Accept-Language header
+    accept_lang = request.headers.get('Accept-Language', '')
+    if 'ru' in accept_lang.lower():
+        return 'ru'
+    elif 'de' in accept_lang.lower():
+        return 'de'
+    
+    return DEFAULT_LANGUAGE
+
 
 def get_template_response(
     request: Request,
     template_name: str,
-    context: dict = None
+    context: dict = None,
+    user: Optional[User] = None
 ) -> HTMLResponse:
     """Helper to render templates with common context"""
     if templates is None:
         return HTMLResponse(content="<h1>Templates not configured</h1>", status_code=500)
     
-    ctx = {"request": request}
+    # Get language
+    language = get_language(request, user)
+    
+    ctx = {
+        "request": request,
+        "language": language
+    }
     if context:
         ctx.update(context)
     
@@ -43,7 +74,7 @@ async def home(
     if user:
         return RedirectResponse(url="/dashboard", status_code=302)
     
-    return get_template_response(request, "index.html", {"user": user})
+    return get_template_response(request, "index.html", {"user": user}, user)
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -55,7 +86,7 @@ async def login_page(
     if user:
         return RedirectResponse(url="/dashboard", status_code=302)
     
-    return get_template_response(request, "login.html")
+    return get_template_response(request, "login.html", user=user)
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -67,7 +98,7 @@ async def register_page(
     if user:
         return RedirectResponse(url="/dashboard", status_code=302)
     
-    return get_template_response(request, "register.html")
+    return get_template_response(request, "register.html", user=user)
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -79,7 +110,7 @@ async def dashboard(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
     
-    return get_template_response(request, "dashboard.html", {"user": user})
+    return get_template_response(request, "dashboard.html", {"user": user}, user)
 
 
 @router.get("/projects/{project_id}", response_class=HTMLResponse)
@@ -95,7 +126,8 @@ async def project_page(
     return get_template_response(
         request, 
         "project.html", 
-        {"user": user, "project_id": project_id}
+        {"user": user, "project_id": project_id},
+        user
     )
 
 
@@ -112,7 +144,8 @@ async def episode_page(
     return get_template_response(
         request, 
         "episode.html", 
-        {"user": user, "episode_id": episode_id}
+        {"user": user, "episode_id": episode_id},
+        user
     )
 
 
@@ -125,7 +158,7 @@ async def voices_page(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
     
-    return get_template_response(request, "voices.html", {"user": user})
+    return get_template_response(request, "voices.html", {"user": user}, user)
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -137,4 +170,4 @@ async def settings_page(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
     
-    return get_template_response(request, "settings.html", {"user": user})
+    return get_template_response(request, "settings.html", {"user": user}, user)

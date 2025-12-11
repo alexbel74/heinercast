@@ -1490,3 +1490,325 @@ h3 { font-size: 1.25rem; }
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+/* ==================== Progress Modal ==================== */
+
+.progress-modal .modal-content {
+    max-width: 420px;
+    text-align: center;
+}
+
+.progress-header {
+    margin-bottom: 2rem;
+}
+
+.progress-icon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: 0.75rem;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.progress-container {
+    padding: 1rem 0;
+}
+
+.progress-bar-wrapper {
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    height: 28px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border-default);
+}
+
+.progress-bar {
+    background: var(--accent-gradient);
+    height: 100%;
+    transition: width 0.5s ease;
+    border-radius: 12px;
+    position: relative;
+    min-width: 40px;
+}
+
+.progress-bar::after {
+    content: attr(data-percent);
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.progress-bar.error {
+    background: linear-gradient(135deg, var(--status-error) 0%, #dc2626 100%);
+}
+
+.progress-status {
+    margin-top: 1.25rem;
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.progress-details {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    min-height: 1.25rem;
+}
+
+/* ==================== Toast Notifications ==================== */
+
+.toast-container {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--status-info);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    animation: slideIn 0.3s ease;
+    min-width: 280px;
+}
+
+.toast.success {
+    border-left-color: var(--status-success);
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.1) 0%, var(--bg-secondary) 100%);
+}
+
+.toast.error {
+    border-left-color: var(--status-error);
+    background: linear-gradient(135deg, rgba(248, 81, 73, 0.1) 0%, var(--bg-secondary) 100%);
+}
+
+.toast.warning {
+    border-left-color: var(--status-warning);
+    background: linear-gradient(135deg, rgba(210, 153, 34, 0.1) 0%, var(--bg-secondary) 100%);
+}
+
+.toast.info {
+    border-left-color: var(--status-info);
+}
+
+.toast-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.toast-message {
+    flex: 1;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.toast-close:hover {
+    opacity: 1;
+    color: var(--text-primary);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* ==================== Language Selector ==================== */
+
+.language-selector {
+    position: relative;
+}
+
+.language-selector select {
+    appearance: none;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    padding: 6px 30px 6px 12px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.language-selector select:hover {
+    border-color: var(--accent-primary);
+}
+
+.language-selector select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
+.language-selector::after {
+    content: '▼';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+/* ==================== Generation Buttons ==================== */
+
+.generation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 1.5rem 0;
+}
+
+.btn-generate {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-generate:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+}
+
+.btn-generate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-generate.primary {
+    background: var(--accent-gradient);
+    border-color: transparent;
+}
+
+.btn-generate.primary:hover {
+    opacity: 0.9;
+}
+
+.btn-generate .icon {
+    font-size: 1.1rem;
+}
+
+/* ==================== Status Badge ==================== */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-badge.draft {
+    background: rgba(139, 148, 158, 0.2);
+    color: var(--text-secondary);
+}
+
+.status-badge.processing {
+    background: rgba(163, 113, 247, 0.2);
+    color: var(--status-processing);
+    animation: statusPulse 1.5s ease-in-out infinite;
+}
+
+.status-badge.done {
+    background: rgba(63, 185, 80, 0.2);
+    color: var(--status-success);
+}
+
+.status-badge.error {
+    background: rgba(248, 81, 73, 0.2);
+    color: var(--status-error);
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ==================== Error Display ==================== */
+
+.error-message {
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid var(--status-error);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.error-message .error-title {
+    color: var(--status-error);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.error-message .error-details {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-family: var(--font-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
