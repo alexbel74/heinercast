@@ -21,6 +21,7 @@
         <button class="tab" data-tab="audio">Audio</button>
         <button class="tab" data-tab="cover">Cover</button>
         <button class="tab" data-tab="music" id="music-tab" style="display:none;">Music</button>
+        <button class="tab" data-tab="sounds" id="sounds-tab" style="display:none;">Sounds</button>
     </div>
     
     <!-- Tab Contents -->
@@ -48,12 +49,11 @@
         </div>
     </div>
 
-    <div class="tab-content" id="tab-music">
-        <div class="music-container" id="music-container">
-            <!-- Music will be loaded here -->
+    <div class="tab-content" id="tab-sounds">
+        <div class="sounds-container" id="sounds-container">
+            <!-- Sounds will be loaded here -->
         </div>
     </div>
-    
     <!-- Generation Progress -->
     <div class="generation-progress" id="generation-progress" style="display: none;">
         <h3>Generation Progress</h3>
@@ -192,9 +192,8 @@ function renderEpisode() {
     
     // Music tab (show/hide based on project settings)
     renderMusic();
+    renderSounds();
     
-    // Music tab (show/hide based on project settings)
-    renderMusic();
     // Progress
     if (isInProgress(episode.status)) {
         renderProgress();
@@ -407,6 +406,68 @@ function renderMusic() {
                     <button class="btn btn-outline" style="margin-top: 0.5rem;" onclick="downloadMerged()">📥 Download Merged</button> <button class="btn btn-outline btn-danger" onclick="deleteMerged()">🗑️ Delete</button>
                 </div>
             ` : ""}
+        </div>
+    `;
+}
+
+function renderSounds() {
+    // Show/hide Sounds tab based on project settings
+    const soundsTab = document.getElementById("sounds-tab");
+    if (episode.include_sound_effects) {
+        soundsTab.style.display = "inline-block";
+    } else {
+        soundsTab.style.display = "none";
+        return;
+    }
+
+    const container = document.getElementById("sounds-container");
+
+    // Check if voice audio exists first
+    if (!episode.voice_audio_url) {
+        container.innerHTML = `
+            <div class="empty-state-small">
+                <p>Generate voiceover first to create sound effects.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Get sounds from script
+    const lines = episode.script_json?.lines || [];
+    const soundEffects = lines.filter(l => l.sound_effect).map(l => l.sound_effect);
+    const uniqueSounds = [...new Set(soundEffects)];
+
+    // Sounds not generated yet
+    if (!episode.sounds_json || episode.sounds_json.length === 0) {
+        container.innerHTML = `
+            <div class="sounds-list">
+                <h4>Sound Effects in Script (${uniqueSounds.length})</h4>
+                <ul style="margin: 1rem 0; padding-left: 1.5rem;">
+                    ${uniqueSounds.map(s => `<li style="margin: 0.3rem 0;">🔊 ${s}</li>`).join("")}
+                </ul>
+                <button class="btn btn-primary" onclick="generateSounds()">🔊 Generate All Sounds</button>
+            </div>
+        `;
+        return;
+    }
+
+    // Sounds generated
+    container.innerHTML = `
+        <div class="sounds-generated">
+            <h4>Generated Sounds (${episode.sounds_json.length})</h4>
+            <div class="sounds-grid" style="display: grid; gap: 1rem; margin: 1rem 0;">
+                ${episode.sounds_json.map((sound, i) => `
+                    <div class="sound-item" style="padding: 0.5rem; background: var(--bg-secondary); border-radius: 8px;">
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem;">🔊 ${sound.prompt || "Sound " + (i+1)}</p>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;"><audio controls style="flex: 1; height: 32px;">
+                            <source src="${sound.url}" type="audio/mpeg">
+                        </audio><button class="btn-icon" onclick="regenerateSingleSound(${i})" title="Regenerate">🔄</button></div></div>
+                `).join("")}
+            </div>
+            <div style="margin-top: 1rem;">
+                <button class="btn btn-outline" onclick="regenerateSounds()">🔄 Regenerate All</button>
+                <button class="btn btn-outline btn-danger" onclick="deleteSounds()">🗑️ Delete All</button>
+            </div>
         </div>
     `;
 }
@@ -879,6 +940,60 @@ async function deleteMusic() {
         }
     } catch (error) {
         showError(error, "Delete music");
+    }
+}
+
+async function generateSounds() {
+    showToast("🔊 Generating sound effects...", "info");
+    
+    try {
+        const result = await api.post(`/api/generation/sounds/${episodeId}`, {});
+        if (result.ok) {
+            showToast("Sound effects generated!", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Generate sounds");
+    }
+}
+
+async function regenerateSounds() {
+    if (!confirm("Regenerate all sound effects?")) return;
+    await deleteSounds();
+    await generateSounds();
+}
+
+async function deleteSounds() {
+    if (!confirm("Delete all sound effects?")) return;
+    
+    try {
+        const result = await api.delete(`/api/generation/sounds/${episodeId}`);
+        if (result.ok) {
+            showToast("Sounds deleted", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Delete sounds");
+    }
+}
+
+async function regenerateSingleSound(index) {
+    const sound = episode.sounds_json[index];
+    if (!sound) return;
+    
+    showToast(`🔊 Regenerating: ${sound.prompt}...`, "info");
+    
+    try {
+        const result = await api.post(`/api/generation/sounds/${episodeId}/single`, {
+            index: index,
+            prompt: sound.prompt
+        });
+        if (result.ok) {
+            showToast("Sound regenerated!", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Regenerate sound");
     }
 }
 

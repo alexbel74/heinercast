@@ -908,7 +908,7 @@ async def get_generation_status(
         
         # Save music file
         music_filename = f"music_{episode.id}.mp3"
-        music_url = await storage_service.save_bytes(
+        music_url = await storage_service.save_file(
             music_bytes,
             filename=music_filename,
             subfolder="music"
@@ -1027,3 +1027,89 @@ async def delete_merged_audio(
         await db.commit()
     
     return {"message": "Merged audio deleted"}
+
+
+@router.delete("/sounds/{episode_id}")
+async def delete_sounds(
+    episode_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete generated sounds for an episode"""
+    episode = await db.get(Episode, episode_id)
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    # Delete sound files from storage
+    if episode.sounds_json:
+        for sound in episode.sounds_json:
+            if sound.get("url"):
+                file_path = f"/var/www/heinercast/storage{sound['url'].replace('/storage', '')}"
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+    # Clear sounds in database
+    episode.sounds_json = None
+    await db.commit()
+
+    return {"message": "Sounds deleted"}
+
+
+@router.post("/sounds/{episode_id}/single")
+async def regenerate_single_sound(
+    episode_id: UUID,
+    request: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Regenerate a single sound effect"""
+    episode = await db.get(Episode, episode_id)
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    index = request.get("index", 0)
+    prompt = request.get("prompt", "")
+
+    if not episode.sounds_json or index >= len(episode.sounds_json):
+        raise HTTPException(status_code=400, detail="Invalid sound index")
+
+    # Get old sound to delete
+    old_sound = episode.sounds_json[index]
+    if old_sound.get("url"):
+        old_path = f"/var/www/heinercast/storage{old_sound['url'].replace('/storage', '')}"
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+    # Generate new sound
+    elevenlabs_service = ElevenLabsService(current_user)
+    audio_bytes = await elevenlabs_service.generate_sound_effect(
+        prompt=prompt,
+        duration_seconds=3.0,
+        prompt_influence=0.3
+    )
+
+    # Save new sound
+    storage_service = StorageService(
+        current_user.storage_type,
+        current_user.google_drive_credentials
+    )
+    
+    import uuid as uuid_module
+    sound_filename = f"{uuid_module.uuid4()}.mp3"
+    sound_url = await storage_service.save_file(
+        audio_bytes,
+        filename=sound_filename,
+        subfolder="audio"
+    )
+
+    # Update sounds_json
+    sounds = episode.sounds_json.copy()
+    sounds[index] = {
+        **old_sound,
+        "url": sound_url,
+        "local_path": f"/storage/audio/{sound_filename}"
+    }
+    episode.sounds_json = sounds
+    await db.commit()
+
+    return {"message": "Sound regenerated", "url": sound_url}
