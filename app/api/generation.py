@@ -493,23 +493,29 @@ async def generate_cover(
             current_user.google_drive_credentials
         )
         
-        prompt = request.custom_prompt or cover_service.build_cover_prompt(
+        base_prompt = cover_service.build_cover_prompt(
             title=episode.title or project.title,
             genre_tone=project.genre_tone,
             description=episode.description,
             template=current_user.cover_prompt_template
         )
+        # Add custom instructions if provided
+        prompt = base_prompt
+        if request.custom_prompt:
+            prompt = f"{base_prompt}\n\nAdditional instructions: {request.custom_prompt}"
         
         # Store reference image if provided
-        reference_url = request.reference_image_url
+        reference_url = request.reference_images[0] if request.reference_images else None
         if reference_url:
             episode.cover_reference_image_url = reference_url
         
         # Generate covers
+        reference_urls = request.reference_images or ([reference_url] if reference_url else None)
         cover_urls = await cover_service.generate_multiple_covers(
             prompt=prompt,
             count=request.variants_count,
-            reference_image_url=reference_url
+            reference_image_urls=request.reference_images,
+            aspect_ratio=request.aspect_ratio
         )
         
         # Save cover URLs locally

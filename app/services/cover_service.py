@@ -41,7 +41,7 @@ class CoverService:
     async def generate_cover(
         self,
         prompt: str,
-        reference_image_url: Optional[str] = None,
+        reference_image_urls: Optional[List[str]] = None,
         aspect_ratio: str = "1:1",
         resolution: str = "2K",
         callback_url: Optional[str] = None
@@ -68,8 +68,14 @@ class CoverService:
             "output_format": "png"
         }
         
-        if reference_image_url:
-            input_data["image_input"] = [reference_image_url]
+        if reference_image_urls:
+            # Convert relative paths to full URLs for kie.ai
+            full_urls = []
+            for img_url in reference_image_urls:
+                if img_url.startswith("/storage"):
+                    img_url = f"http://37.233.81.221:8000{img_url}"
+                full_urls.append(img_url)
+            input_data["image_input"] = full_urls
         
         body = {
             "model": "nano-banana-pro",
@@ -86,7 +92,9 @@ class CoverService:
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.info(f"Making POST request to URL: {url}")
                 response = await client.post(url, json=body, headers=headers)
+                logger.info(f"kie.ai request body: {body}")
                 response.raise_for_status()
                 
                 data = response.json()
@@ -182,7 +190,7 @@ class CoverService:
     async def generate_cover_and_wait(
         self,
         prompt: str,
-        reference_image_url: Optional[str] = None,
+        reference_image_urls: Optional[List[str]] = None,
         aspect_ratio: str = "1:1",
         resolution: str = "2K",
         max_wait_seconds: int = 180,
@@ -205,7 +213,7 @@ class CoverService:
         # Start generation
         result = await self.generate_cover(
             prompt=prompt,
-            reference_image_url=reference_image_url,
+            reference_image_urls=reference_image_urls,
             aspect_ratio=aspect_ratio,
             resolution=resolution
         )
@@ -239,7 +247,7 @@ class CoverService:
         self,
         prompt: str,
         count: int = 1,
-        reference_image_url: Optional[str] = None,
+        reference_image_urls: Optional[List[str]] = None,
         aspect_ratio: str = "1:1",
         resolution: str = "2K"
     ) -> List[str]:
@@ -263,7 +271,7 @@ class CoverService:
         for _ in range(count):
             task = self.generate_cover_and_wait(
                 prompt=prompt,
-                reference_image_url=reference_image_url,
+                reference_image_urls=reference_image_urls,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution
             )

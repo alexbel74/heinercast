@@ -284,3 +284,9 @@ async def delete_audio(
         episode.final_audio_duration_seconds = None
     
     return {"message": "Audio files deleted", "deleted": deleted}
+
+@router.post("/storage/{path:path}")
+async def storage_post_handler(path: str):
+    """Handle POST requests to storage (for kie.ai validation)"""
+    return {"status": "ok"}
+

@@ -60,18 +60,41 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Reference Image (optional)</label>
-                    <div class="file-upload-area" id="reference-upload-area">
-                        <input type="file" id="reference-file" accept="image/*" onchange="handleReferenceUpload(event)" style="display:none;">
-                        <div id="reference-preview" class="reference-preview" style="display:none;">
-                            <img id="reference-image" src="" alt="Reference">
-                            <button class="btn btn-sm" onclick="clearReference()">Remove</button>
+                    <label>Reference Images (optional, up to 3)</label>
+                    <div class="reference-images-container" id="reference-images-container">
+                        <div class="reference-slots">
+                            <div class="reference-slot" id="ref-slot-0" onclick="triggerRefUpload(0)">
+                                <input type="file" id="ref-file-0" accept="image/*" onchange="handleMultiRefUpload(event, 0)" style="display:none;">
+                                <div class="ref-preview" style="display:none;"></div>
+                                <div class="ref-placeholder">📷 +</div>
+                            </div>
+                            <div class="reference-slot" id="ref-slot-1" onclick="triggerRefUpload(1)">
+                                <input type="file" id="ref-file-1" accept="image/*" onchange="handleMultiRefUpload(event, 1)" style="display:none;">
+                                <div class="ref-preview" style="display:none;"></div>
+                                <div class="ref-placeholder">📷 +</div>
+                            </div>
+                            <div class="reference-slot" id="ref-slot-2" onclick="triggerRefUpload(2)">
+                                <input type="file" id="ref-file-2" accept="image/*" onchange="handleMultiRefUpload(event, 2)" style="display:none;">
+                                <div class="ref-preview" style="display:none;"></div>
+                                <div class="ref-placeholder">📷 +</div>
+                            </div>
                         </div>
-                        <div id="reference-placeholder" class="upload-placeholder" onclick="document.getElementById('reference-file').click()">
-                            <span>📷 Click to upload reference image</span>
-                            <span class="hint">Or generate without reference</span>
-                        </div>
+                        <span class="hint">Style reference, character reference, etc.</span>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label>Aspect Ratio</label>
+                    <select id="aspect-ratio" class="form-control">
+                        <option value="1:1" selected>1:1 — Square (Podcasts, Spotify)</option>
+                        <option value="16:9">16:9 — YouTube Thumbnail</option>
+                        <option value="9:16">9:16 — Stories (Instagram, TikTok)</option>
+                        <option value="4:3">4:3 — Classic</option>
+                        <option value="3:4">3:4 — Portrait/Poster</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Additional Instructions (optional)</label>
+                    <textarea id="custom-prompt" class="form-control" rows="3" placeholder="e.g. Use character from image 1, style from image 2, add logo from image 3..."></textarea>
                 </div>
                 <div class="form-group">
                     <label>Number of variants</label>
@@ -420,11 +443,59 @@ function generateCover() {
     document.getElementById("cover-modal").classList.add("active");
 }
 
-let referenceImageUrl = null;
+let referenceImages = [null, null, null];
+
+function triggerRefUpload(index) {
+    document.getElementById(`ref-file-${index}`).click();
+}
+
+async function handleMultiRefUpload(event, index) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/api/files/upload/reference', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: formData
+        });
+        const data = await response.json();
+        if (data.url) {
+            referenceImages[index] = data.url; console.log('Uploaded ref:', index, data.url, 'All refs:', referenceImages);
+            const slot = document.getElementById(`ref-slot-${index}`);
+            const preview = slot.querySelector('.ref-preview');
+            const placeholder = slot.querySelector('.ref-placeholder');
+            preview.innerHTML = `<img src="${data.url}" alt="Ref ${index+1}"><button class="ref-remove" onclick="event.stopPropagation(); clearMultiRef(${index})">×</button>`;
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+        }
+    } catch (error) {
+        showToast('Error uploading image', 'error');
+    }
+}
+
+function clearMultiRef(index) {
+    referenceImages[index] = null;
+    const slot = document.getElementById(`ref-slot-${index}`);
+    const preview = slot.querySelector('.ref-preview');
+    const placeholder = slot.querySelector('.ref-placeholder');
+    preview.style.display = 'none';
+    placeholder.style.display = 'flex';
+    document.getElementById(`ref-file-${index}`).value = '';
+}
+
+function clearAllRefs() {
+    for (let i = 0; i < 3; i++) {
+        clearMultiRef(i);
+    }
+}
 
 function closeCoverModal() {
     document.getElementById("cover-modal").classList.remove("active");
-    clearReference();
+    clearAllRefs();
 }
 
 function handleReferenceUpload(event) {
@@ -450,16 +521,23 @@ function clearReference() {
 }
 
 async function startCoverGeneration() {
-    closeCoverModal();
+    const refs = referenceImages.filter(r => r !== null);
     const variantsCount = parseInt(document.getElementById("variants-count").value);
-    
+    const aspectRatio = document.getElementById("aspect-ratio").value;
+    const customPrompt = document.getElementById("custom-prompt").value || null;
+
+    // Close modal and show toast immediately
+    closeCoverModal();
+    showToast('✅ Запрос на генерацию обложки отправлен', 'success');
+
     try {
-        const result = await api.post(`/api/generation/cover/${episodeId}`, { 
+        const result = await api.post(`/api/generation/cover/${episodeId}`, {
             variants_count: variantsCount,
-            reference_image_url: referenceImageUrl
+            aspect_ratio: aspectRatio,
+            reference_images: refs.length > 0 ? refs : null,
+            custom_prompt: customPrompt
         });
         if (result.ok) {
-            showToast('✅ Запрос на генерацию обложки отправлен', 'success');
             loadEpisode();
         }
     } catch (error) {
