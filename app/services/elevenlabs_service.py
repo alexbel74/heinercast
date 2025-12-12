@@ -337,7 +337,7 @@ class ElevenLabsService:
         
         body = {
             "composition_plan": composition_plan,
-            "force_instrumental": force_instrumental
+            
         }
         
         logger.info(f"Generating music, instrumental={force_instrumental}")

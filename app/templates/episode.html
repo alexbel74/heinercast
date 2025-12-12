@@ -20,6 +20,7 @@
         <button class="tab active" data-tab="script">Script</button>
         <button class="tab" data-tab="audio">Audio</button>
         <button class="tab" data-tab="cover">Cover</button>
+        <button class="tab" data-tab="music" id="music-tab" style="display:none;">Music</button>
     </div>
     
     <!-- Tab Contents -->
@@ -38,6 +39,18 @@
     <div class="tab-content" id="tab-cover">
         <div class="cover-container" id="cover-container">
             <!-- Cover will be loaded here -->
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-music">
+        <div class="music-container" id="music-container">
+            <!-- Music will be loaded here -->
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-music">
+        <div class="music-container" id="music-container">
+            <!-- Music will be loaded here -->
         </div>
     </div>
     
@@ -177,6 +190,11 @@ function renderEpisode() {
     // Cover tab
     renderCover();
     
+    // Music tab (show/hide based on project settings)
+    renderMusic();
+    
+    // Music tab (show/hide based on project settings)
+    renderMusic();
     // Progress
     if (isInProgress(episode.status)) {
         renderProgress();
@@ -315,6 +333,83 @@ function renderCover() {
     `;
 }
 
+
+function renderMusic() {
+    // Show/hide Music tab based on project settings
+    const musicTab = document.getElementById("music-tab");
+    if (episode.include_background_music) {
+        musicTab.style.display = "inline-block";
+    } else {
+        musicTab.style.display = "none";
+        return;
+    }
+
+    const container = document.getElementById("music-container");
+    
+    // Check if voice audio exists first
+    if (!episode.voice_audio_url) {
+        container.innerHTML = `
+            <div class="empty-state-small">
+                <p>Generate voiceover first to create background music.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Music not generated yet
+    if (!episode.music_url) {
+        container.innerHTML = `
+            <div class="empty-state-small">
+                <p>No background music yet.</p>
+                <p class="text-muted">Duration will match voiceover: ${formatDuration(episode.voice_audio_duration_seconds || 0)}</p>
+                <button class="btn btn-primary" onclick="openMusicModal()">🎵 Generate Music</button>
+            </div>
+        `;
+        return;
+    }
+
+    // Music exists
+    container.innerHTML = `
+        <div class="music-player">
+            <h4>Background Music</h4>
+            <audio controls style="width: 100%;">
+                <source src="${episode.music_url}" type="audio/mpeg">
+            </audio>
+            <div class="audio-info">
+                <span>Duration: ${formatDuration(episode.voice_audio_duration_seconds || 0)}</span>
+            </div>
+        </div>
+        <div class="music-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-outline" onclick="downloadMusic()">📥 Download</button>
+            <button class="btn btn-outline" onclick="regenerateMusic()">🔄 Regenerate</button>
+            <button class="btn btn-outline btn-danger" onclick="deleteMusic()">🗑️ Delete</button>
+        </div>
+        
+        <div class="merge-section" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <h4>Merge Voice + Music</h4>
+            <div class="merge-controls" style="display: flex; align-items: center; gap: 1rem; margin: 1rem 0;">
+                <label>Music Volume:</label>
+                <select id="music-volume-select" class="form-select" style="width: auto;">
+                    <option value="-6">-6 dB (Louder)</option>
+                    <option value="-9">-9 dB</option>
+                    <option value="-12" selected>-12 dB (Default)</option>
+                    <option value="-15">-15 dB</option>
+                    <option value="-18">-18 dB (Quieter)</option>
+                </select>
+                <button class="btn btn-primary" onclick="mergeAudio()">🔀 Merge Audio</button>
+            </div>
+            ${episode.final_audio_url ? `
+                <div class="merged-audio" style="margin-top: 1rem;">
+                    <h5>Merged Result</h5>
+                    <audio controls style="width: 100%;">
+                        <source src="${episode.final_audio_url}" type="audio/mpeg">
+                    </audio>
+                    <button class="btn btn-outline" style="margin-top: 0.5rem;" onclick="downloadMerged()">📥 Download Merged</button> <button class="btn btn-outline btn-danger" onclick="deleteMerged()">🗑️ Delete</button>
+                </div>
+            ` : ""}
+        </div>
+    `;
+}
 function renderProgress() {
     document.getElementById('generation-progress').style.display = 'block';
     
@@ -744,6 +839,95 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // Load on page load
+// ============ MUSIC FUNCTIONS ============
+
+function openMusicModal() {
+    generateMusic();
+}
+
+async function generateMusic() {
+    showToast("🎵 Generating background music...", "info");
+    
+    try {
+        const result = await api.post(`/api/generation/music/${episodeId}`, {
+            prompt: null,
+            music_volume_db: -12
+        });
+        
+        if (result.ok) {
+            showToast("✅ Music generated successfully!", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Generate music");
+    }
+}
+
+async function regenerateMusic() {
+    if (!confirm("Regenerate background music?")) return;
+    await generateMusic();
+}
+
+async function deleteMusic() {
+    if (!confirm("Delete background music?")) return;
+    
+    try {
+        const result = await api.delete(`/api/generation/music/${episodeId}`);
+        if (result.ok) {
+            showToast("Music deleted", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Delete music");
+    }
+}
+
+async function mergeAudio() {
+    const volumeSelect = document.getElementById("music-volume-select");
+    const musicVolumeDb = parseFloat(volumeSelect.value);
+    
+    showToast("🔀 Merging audio...", "info");
+    
+    try {
+        const result = await api.post(`/api/generation/music/${episodeId}/merge`, {
+            music_volume_db: musicVolumeDb
+        });
+        
+        if (result.ok) {
+            showToast("✅ Audio merged successfully!", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Merge audio");
+    }
+}
+
+function downloadMusic() {
+    if (episode.music_url) {
+        window.open(episode.music_url, "_blank");
+    }
+}
+
+function downloadMerged() {
+    if (episode.final_audio_url) {
+        window.open(episode.final_audio_url, "_blank");
+    }
+}
+
+async function deleteMerged() {
+    if (!confirm("Delete merged audio?")) return;
+    
+    try {
+        const result = await api.delete(`/api/generation/music/${episodeId}/merged`);
+        if (result.ok) {
+            showToast("Merged audio deleted", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Delete merged");
+    }
+}
+
 document.addEventListener('DOMContentLoaded', loadEpisode);
 
 // Cleanup on page leave

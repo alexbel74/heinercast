@@ -73,6 +73,8 @@ class MergeAudioRequest(BaseModel):
     voice_volume: float = Field(default=1.0, ge=0.0, le=2.0)
     sounds_volume: float = Field(default=0.8, ge=0.0, le=2.0)
     music_volume: float = Field(default=0.3, ge=0.0, le=1.0)
+    music_volume_db: float = Field(default=-12.0)
+    music_volume_db: float = Field(default=-12.0)  # dB for merge
 
 
 class MergeAudioResponse(BaseModel):
@@ -115,6 +117,8 @@ class GenerateFullRequest(BaseModel):
     voice_volume: float = Field(default=1.0, ge=0.0, le=2.0)
     sounds_volume: float = Field(default=0.8, ge=0.0, le=2.0)
     music_volume: float = Field(default=0.3, ge=0.0, le=1.0)
+    music_volume_db: float = Field(default=-12.0)
+    music_volume_db: float = Field(default=-12.0)  # dB for merge
 
 
 class GenerateFullResponse(BaseModel):

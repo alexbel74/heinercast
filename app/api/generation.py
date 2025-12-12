@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -422,7 +422,7 @@ async def merge_audio(
             music_path=music_path,
             voice_volume=request.voice_volume,
             sounds_volume=request.sounds_volume,
-            music_volume=request.music_volume
+            music_volume=request.music_volume_db
         )
         
         # Get duration
@@ -740,7 +740,7 @@ async def generate_full(
             music_path=episode.music_url if episode.include_background_music else None,
             voice_volume=request.voice_volume,
             sounds_volume=request.sounds_volume,
-            music_volume=request.music_volume
+            music_volume=request.music_volume_db
         )
         
         final_duration = await audio_service.get_audio_duration(final_url)
@@ -862,3 +862,168 @@ async def get_generation_status(
         audio_ready=bool(episode.final_audio_url),
         cover_ready=bool(episode.cover_url)
     )
+
+
+    from ..services.music_service import MusicService
+    
+    # Check if voice audio exists
+    if not episode.voice_audio_url or not episode.voice_audio_duration_seconds:
+        raise HTTPException(status_code=400, detail="Voice audio must be generated first")
+    
+    # Get project for genre/atmosphere info
+    project_result = await db.execute(
+        select(Project).where(Project.id == episode.project_id)
+    )
+    project = project_result.scalar_one()
+    
+    # Build music prompt
+    if request.prompt:
+        music_prompt = request.prompt
+    else:
+        music_prompt = MusicService.build_music_prompt(
+            genre_tone=project.genre_tone,
+            musical_atmosphere=project.musical_atmosphere
+        )
+    
+    # Calculate duration in ms (from voice audio)
+    duration_ms = int(episode.voice_audio_duration_seconds * 1000)
+    
+    # Update status
+    episode.status = "music_generating"
+    await db.commit()
+    
+    try:
+        music_service = MusicService(current_user.elevenlabs_api_key)
+        storage_service = StorageService(
+            current_user.storage_type,
+            current_user.google_drive_credentials
+        )
+        
+        # Generate music
+        music_bytes = await music_service.generate_music(
+            prompt=music_prompt,
+            duration_ms=duration_ms,
+            force_instrumental=True
+        )
+        
+        # Save music file
+        music_filename = f"music_{episode.id}.mp3"
+        music_url = await storage_service.save_bytes(
+            music_bytes,
+            filename=music_filename,
+            subfolder="music"
+        )
+        
+        episode.music_url = music_url
+        episode.status = EpisodeStatus.DONE.value
+        await db.commit()
+        
+        return {
+            "episode_id": str(episode.id),
+            "music_url": music_url,
+            "duration_ms": duration_ms,
+            "prompt": music_prompt
+        }
+        
+    except Exception as e:
+        episode.status = EpisodeStatus.ERROR.value
+        episode.error_message = str(e)
+        await db.commit()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/music/{episode_id}/merge")
+async def merge_audio_with_music(
+    episode_id: UUID,
+    request: MergeAudioRequest,
+    episode: Episode = Depends(verify_episode_ownership),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Merge voice audio with background music"""
+    from ..services.music_service import MusicService
+    import tempfile
+    import os
+    
+    # Check prerequisites
+    if not episode.voice_audio_url:
+        raise HTTPException(status_code=400, detail="Voice audio not found")
+    if not episode.music_url:
+        raise HTTPException(status_code=400, detail="Music not generated yet")
+    
+    storage_service = StorageService(
+        current_user.storage_type,
+        current_user.google_drive_credentials
+    )
+    
+    try:
+        # Get local paths
+        voice_path = f"/var/www/heinercast/storage{episode.voice_audio_url.replace('/storage', '')}"
+        music_path = f"/var/www/heinercast/storage{episode.music_url.replace('/storage', '')}"
+        
+        # Create temp output file
+        output_filename = f"merged_{episode.id}_{abs(int(request.music_volume_db))}db.mp3"
+        output_path = f"/var/www/heinercast/storage/audio/{output_filename}"
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Merge audio
+        await MusicService.merge_audio_with_music(
+            voice_path=voice_path,
+            music_path=music_path,
+            output_path=output_path,
+            music_volume_db=request.music_volume_db
+        )
+        
+        # Save URL
+        merged_url = f"/storage/audio/{output_filename}"
+        episode.final_audio_url = merged_url
+        await db.commit()
+        
+        return {
+            "episode_id": str(episode.id),
+            "merged_url": merged_url,
+            "music_volume_db": request.music_volume_db
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/music/{episode_id}")
+async def delete_music(
+    episode_id: UUID,
+    episode: Episode = Depends(verify_episode_ownership),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete generated music"""
+    import os
+    
+    if episode.music_url:
+        music_path = f"/var/www/heinercast/storage{episode.music_url.replace('/storage', '')}"
+        if os.path.exists(music_path):
+            os.remove(music_path)
+        episode.music_url = None
+        await db.commit()
+    
+    return {"message": "Music deleted"}
+
+
+@router.delete("/music/{episode_id}/merged")
+async def delete_merged_audio(
+    episode_id: UUID,
+    episode: Episode = Depends(verify_episode_ownership),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete merged audio"""
+    import os
+    
+    if episode.final_audio_url:
+        merged_path = f"/var/www/heinercast/storage{episode.final_audio_url.replace('/storage', '')}"
+        if os.path.exists(merged_path):
+            os.remove(merged_path)
+        episode.final_audio_url = None
+        await db.commit()
+    
+    return {"message": "Merged audio deleted"}
