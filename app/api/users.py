@@ -45,6 +45,7 @@ async def get_user_settings(
         storage_type=current_user.storage_type,
         has_google_drive_credentials=bool(current_user.google_drive_credentials),
         ai_writer_prompt=current_user.ai_writer_prompt,
+        ai_methodology=current_user.ai_methodology,
         cover_prompt_template=current_user.cover_prompt_template,
         telegram_chat_id=current_user.telegram_chat_id
     )
@@ -176,7 +177,10 @@ async def update_prompts_settings(
     """Update AI prompts"""
     if settings_data.ai_writer_prompt is not None:
         current_user.ai_writer_prompt = settings_data.ai_writer_prompt
-    
+
+    if settings_data.ai_methodology is not None:
+        current_user.ai_methodology = settings_data.ai_methodology
+
     if settings_data.cover_prompt_template is not None:
         current_user.cover_prompt_template = settings_data.cover_prompt_template
     

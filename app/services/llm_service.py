@@ -164,6 +164,12 @@ Do NOT spoil any final twists, but mention the core conflict."""
             context_parts.append("")
             context_parts.append("SOUND EFFECTS: Do NOT include sound effects (set all sound_effect to null)")
         
+        # Add methodology if available
+        if self.user.ai_methodology:
+            context_parts.append("")
+            context_parts.append("=== WRITING METHODOLOGY ===")
+            context_parts.append(self.user.ai_methodology)
+
         # Add previous episodes context if this is a continuation
         if previous_episodes and len(previous_episodes) > 0:
             context_parts.append("")

@@ -87,6 +87,7 @@ class UserSettingsStorage(BaseModel):
 class UserSettingsPrompts(BaseModel):
     """Schema for AI prompts settings"""
     ai_writer_prompt: Optional[str] = None
+    ai_methodology: Optional[str] = None
     cover_prompt_template: Optional[str] = None
 
 
@@ -112,6 +113,7 @@ class UserSettingsResponse(BaseModel):
     
     # Prompts
     ai_writer_prompt: str
+    ai_methodology: Optional[str] = None
     cover_prompt_template: str
     
     # Telegram

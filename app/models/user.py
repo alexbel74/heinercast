@@ -82,6 +82,11 @@ class User(Base):
         Text,
         default=DEFAULT_AI_WRITER_PROMPT
     )
+    ai_methodology: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None
+    )
     cover_prompt_template: Mapped[str] = mapped_column(
         Text,
         default=DEFAULT_COVER_PROMPT_TEMPLATE

@@ -129,6 +129,11 @@
                     <textarea id="ai-writer-prompt" rows="15" class="code-textarea"></textarea>
                 </div>
                 <div class="form-group">
+                    <label for="ai-methodology">Writing Methodology (Optional)</label>
+                    <textarea id="ai-methodology" rows="12" class="code-textarea" placeholder="Add writing methodology, guidelines, or reference materials that will be included when generating scripts..."></textarea>
+                    <span class="form-hint">This content will be added to the context when generating scripts. Leave empty if not needed.</span>
+                </div>
+                <div class="form-group">
                     <label for="cover-prompt-template">Cover Prompt Template</label>
                     <textarea id="cover-prompt-template" rows="8" class="code-textarea"></textarea>
                     <span class="form-hint">Use {title}, {genre_tone}, {description} as placeholders</span>
@@ -246,6 +251,7 @@ function populateSettings() {
     
     // Prompts
     document.getElementById('ai-writer-prompt').value = settings.ai_writer_prompt;
+    document.getElementById('ai-methodology').value = settings.ai_methodology || '';
     document.getElementById('cover-prompt-template').value = settings.cover_prompt_template;
 }
 
@@ -376,6 +382,7 @@ async function savePrompts(event) {
     try {
         const result = await api.put('/api/users/settings/prompts', {
             ai_writer_prompt: document.getElementById('ai-writer-prompt').value,
+            ai_methodology: document.getElementById('ai-methodology').value || null,
             cover_prompt_template: document.getElementById('cover-prompt-template').value
         });
         if (result.ok) {
