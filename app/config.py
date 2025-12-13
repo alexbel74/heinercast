@@ -64,23 +64,28 @@ LLM_PROVIDERS = {
         "base_url": "https://openrouter.ai/api/v1",
         "models": [
             # OpenAI
+            "openai/gpt-5.2",
+            "openai/gpt-5.1",
+            "openai/gpt-5",
+            "openai/gpt-5-mini",
+            "openai/gpt-5-nano",
+            "openai/gpt-4.1",
+            "openai/gpt-4.1-mini",
             "openai/gpt-4o",
             "openai/gpt-4o-mini",
-            "openai/gpt-4-turbo",
-            "openai/gpt-4",
-            "openai/gpt-3.5-turbo",
             # Anthropic
+            "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-haiku-4.5",
             "anthropic/claude-sonnet-4",
-            "anthropic/claude-3-opus",
-            "anthropic/claude-3-sonnet",
-            "anthropic/claude-3-haiku",
             # Google
-            "google/gemini-pro",
-            "google/gemini-1.5-pro",
-            "google/gemini-1.5-flash",
+            "google/gemini-3-pro-preview",
+            "google/gemini-2.5-pro",
+            "google/gemini-2.5-flash",
             # xAI
-            "x-ai/grok-2",
-            "x-ai/grok-2-mini"
+            "x-ai/grok-4.1-fast",
+            "x-ai/grok-4",
+            "x-ai/grok-4-fast",
+            "x-ai/grok-3"
         ]
     },
     "polza": {

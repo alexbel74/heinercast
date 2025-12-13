@@ -215,7 +215,7 @@ Do NOT spoil any final twists, but mention the core conflict."""
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": 8000
+            "max_tokens": 16000
         }
         
         # Add response format for JSON

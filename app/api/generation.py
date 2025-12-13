@@ -50,6 +50,10 @@ async def generate_script(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate script for an episode"""
+    # Check if generation is already in progress
+    if episode.status and episode.status.endswith("_generating"):
+        raise BusinessLogicError("Generation already in progress. Please wait.")
+
     # Get project and characters
     project_result = await db.execute(
         select(Project).where(Project.id == episode.project_id)
@@ -133,6 +137,10 @@ async def generate_voiceover(
     if not episode.script_json:
         raise BusinessLogicError("Episode must have a script before generating voiceover")
     
+    # Check if generation is already in progress
+    if episode.status and episode.status.endswith("_generating"):
+        raise BusinessLogicError("Generation already in progress. Please wait.")
+
     # Delete old audio file before regeneration
     if episode.voice_audio_url:
         old_path = f"/var/www/heinercast/storage{episode.voice_audio_url.replace('/storage', '')}"
@@ -227,6 +235,10 @@ async def generate_sounds(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate sound effects for an episode"""
+    # Check if generation is already in progress
+    if episode.status and episode.status.endswith("_generating"):
+        raise BusinessLogicError("Generation already in progress. Please wait.")
+
     if not episode.voice_audio_url:
         raise BusinessLogicError("Episode must have voiceover before generating sounds")
     
@@ -328,6 +340,10 @@ async def generate_music(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate background music for an episode"""
+    # Check if generation is already in progress
+    if episode.status and episode.status.endswith("_generating"):
+        raise BusinessLogicError("Generation already in progress. Please wait.")
+
     if not episode.voice_audio_url:
         raise BusinessLogicError("Episode must have voiceover before generating music")
     
@@ -457,6 +473,10 @@ async def generate_cover(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate cover image for an episode"""
+    # Check if generation is already in progress
+    if episode.status and episode.status.endswith("_generating"):
+        raise BusinessLogicError("Generation already in progress. Please wait.")
+
     # Delete old cover files before regeneration
     if episode.cover_url:
         old_path = f"/var/www/heinercast/storage{episode.cover_url.replace('/storage', '')}"
