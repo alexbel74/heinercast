@@ -299,7 +299,7 @@ function renderCover() {
         container.innerHTML = `
             <div class="empty-state-small">
                 <p>No cover yet.</p>
-                ${episode.status === 'audio_done' || episode.status === 'done' ? 
+                ${episode.status === 'audio_done' || episode.status === 'done' || episode.status === 'sounds_done' || episode.status === 'voiceover_done' ? 
                     '<button class="btn btn-primary" onclick="generateCover()">Generate Cover</button>' : ''}
             </div>
         `;
@@ -396,6 +396,7 @@ function renderMusic() {
                     <option value="-18">-18 dB (Quieter)</option>
                 </select>
                 <button class="btn btn-primary" onclick="mergeAudio()">🔀 Merge Audio</button>
+                ${episode.sounds_json && episode.sounds_json.length > 0 ? `<button class="btn btn-success" onclick="mergeAll()">🎵 Merge All (Voice+Sounds+Music)</button>` : ""}
             </div>
             ${episode.final_audio_url ? `
                 <div class="merged-audio" style="margin-top: 1rem;">
@@ -465,6 +466,20 @@ function renderSounds() {
                 `).join("")}
             </div>
             <div style="margin-top: 1rem;">
+            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
+                <h5 style="margin: 0 0 0.5rem 0;">Merge Voice + Sounds</h5>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <label>Sounds Volume:
+                        <select id="sounds-volume-select" style="margin-left: 0.5rem;">
+                            <option value="-3">-3 dB (Loud)</option>
+                            <option value="-6" selected>-6 dB (Default)</option>
+                            <option value="-9">-9 dB (Quiet)</option>
+                            <option value="-12">-12 dB (Very Quiet)</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary" onclick="mergeSounds()">🔊 Merge Sounds</button>
+                </div>
+            </div>
                 <button class="btn btn-outline" onclick="regenerateSounds()">🔄 Regenerate All</button>
                 <button class="btn btn-outline btn-danger" onclick="deleteSounds()">🗑️ Delete All</button>
             </div>
@@ -977,6 +992,25 @@ async function deleteSounds() {
     }
 }
 
+async function mergeSounds() {
+    const volumeSelect = document.getElementById("sounds-volume-select");
+    const soundsVolumeDb = parseFloat(volumeSelect.value);
+
+    showToast("🔊 Merging voice with sounds...", "info");
+
+    try {
+        const result = await api.post(`/api/generation/sounds/${episodeId}/merge`, {
+            sounds_volume_db: soundsVolumeDb
+        });
+        if (result.ok) {
+            showToast("Audio merged with sounds!", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Merge sounds");
+    }
+}
+
 async function regenerateSingleSound(index) {
     const sound = episode.sounds_json[index];
     if (!sound) return;
@@ -1015,11 +1049,39 @@ async function mergeAudio() {
     } catch (error) {
         showError(error, "Merge audio");
     }
+
+}
+async function mergeAll() {
+    const musicVolumeDb = parseFloat(document.getElementById("music-volume-select").value);
+    const soundsVolumeDb = document.getElementById("sounds-volume-select") ? parseFloat(document.getElementById("sounds-volume-select").value) : -6.0;
+
+    showToast("🎵 Merging voice + sounds + music...", "info");
+
+    try {
+        const result = await api.post(`/api/generation/merge/${episodeId}/all`, {
+            sounds_volume_db: soundsVolumeDb,
+            music_volume_db: musicVolumeDb
+        });
+        if (result.ok) {
+            showToast("Full audio merge complete!", "success");
+            loadEpisode();
+        }
+    } catch (error) {
+        showError(error, "Merge all");
+    }
 }
 
 function downloadMusic() {
     if (episode.music_url) {
         window.open(episode.music_url, "_blank");
+    }
+}
+
+function playMusic() {
+    if (episode.music_url) {
+        const audio = new Audio(episode.music_url);
+        audio.play();
+        showToast("🎵 Playing music...", "info");
     }
 }
 

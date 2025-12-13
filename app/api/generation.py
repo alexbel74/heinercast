@@ -1,4 +1,6 @@
 import os
+import logging
+logger = logging.getLogger(__name__)
 """
 Generation API Endpoints
 """
@@ -31,6 +33,7 @@ from app.core.dependencies import get_current_user, verify_episode_ownership
 from app.core.exceptions import BusinessLogicError, InvalidStatusTransitionError
 from app.services.llm_service import LLMService
 from app.services.elevenlabs_service import ElevenLabsService
+from app.services.music_service import MusicService
 from app.services.cover_service import CoverService
 from app.services.audio_service import AudioService
 from app.services.storage_service import StorageService
@@ -1113,3 +1116,110 @@ async def regenerate_single_sound(
     await db.commit()
 
     return {"message": "Sound regenerated", "url": sound_url}
+
+
+@router.post("/sounds/{episode_id}/merge")
+async def merge_sounds_with_voice(
+    episode_id: UUID,
+    request: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Merge sound effects with voice audio at timestamps"""
+    episode = await db.get(Episode, episode_id)
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    if not episode.voice_audio_url:
+        raise HTTPException(status_code=400, detail="No voice audio to merge")
+
+    if not episode.sounds_json:
+        raise HTTPException(status_code=400, detail="No sounds to merge")
+
+    sounds_volume_db = request.get("sounds_volume_db", -6.0)
+
+    # Get paths
+    voice_path = f"/var/www/heinercast/storage{episode.voice_audio_url.replace('/storage', '')}"
+    
+    # Create output filename
+    output_filename = f"voice_sounds_{episode.id}_{abs(int(sounds_volume_db))}db.mp3"
+    output_path = f"/var/www/heinercast/storage/audio/{output_filename}"
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    try:
+        # Merge audio with sounds
+        await MusicService.merge_audio_with_sounds(
+            voice_path=voice_path,
+            sounds=episode.sounds_json,
+            output_path=output_path,
+            sounds_volume_db=sounds_volume_db
+        )
+
+        # Save URL
+        merged_url = f"/storage/audio/{output_filename}"
+        episode.final_audio_url = merged_url
+        await db.commit()
+
+        return {
+            "message": "Audio merged with sounds",
+            "url": merged_url,
+            "sounds_volume_db": sounds_volume_db
+        }
+    except Exception as e:
+        logger.error(f"Sounds merge error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/merge/{episode_id}/all")
+async def merge_all_audio(
+    episode_id: UUID,
+    request: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Merge voice with sounds and music together"""
+    episode = await db.get(Episode, episode_id)
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    if not episode.voice_audio_url:
+        raise HTTPException(status_code=400, detail="No voice audio")
+
+    sounds_volume_db = request.get("sounds_volume_db", -6.0)
+    music_volume_db = request.get("music_volume_db", -12.0)
+
+    voice_path = f"/var/www/heinercast/storage{episode.voice_audio_url.replace('/storage', '')}"
+    music_path = None
+    if episode.music_url:
+        music_path = f"/var/www/heinercast/storage{episode.music_url.replace('/storage', '')}"
+
+    parts = ["merged", str(episode.id)]
+    if episode.sounds_json:
+        parts.append(f"s{abs(int(sounds_volume_db))}db")
+    if music_path:
+        parts.append(f"m{abs(int(music_volume_db))}db")
+    output_filename = "_".join(parts) + ".mp3"
+    output_path = f"/var/www/heinercast/storage/audio/{output_filename}"
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    try:
+        await MusicService.merge_all(
+            voice_path=voice_path,
+            sounds=episode.sounds_json if episode.sounds_json else None,
+            music_path=music_path,
+            output_path=output_path,
+            sounds_volume_db=sounds_volume_db,
+            music_volume_db=music_volume_db
+        )
+
+        merged_url = f"/storage/audio/{output_filename}"
+        episode.final_audio_url = merged_url
+        await db.commit()
+
+        return {"message": "Full audio merge complete", "url": merged_url}
+    except Exception as e:
+        logger.error(f"Full merge error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
