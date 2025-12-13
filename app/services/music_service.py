@@ -109,9 +109,9 @@ class MusicService:
         cmd = [
             'ffmpeg', '-y',
             '-i', voice_path,
-            '-i', music_path,
+            '-stream_loop', '-1', '-i', music_path,
             '-filter_complex',
-            f'[1:a]volume={music_volume_db}dB[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[out]',
+            f'[1:a]volume={music_volume_db}dB[music];[0:a][music]amix=inputs=2:duration=first:normalize=0:dropout_transition=2[out]',
             '-map', '[out]',
             '-c:a', 'libmp3lame',
             '-b:a', '192k',
@@ -138,7 +138,7 @@ class MusicService:
         voice_path: str,
         sounds: list,
         output_path: str,
-        sounds_volume_db: float = -6.0
+        sounds_volume_db: float = 0.0
     ) -> str:
         """
         Merge voice audio with sound effects at specific timestamps using ffmpeg.
@@ -192,12 +192,12 @@ class MusicService:
 
         # Mix all sounds together first, then mix with voice
         if len(valid_sounds) == 1:
-            filter_complex = f"{sound_filters[0]};[0:a][s1]amix=inputs=2:duration=first:dropout_transition=0.5[out]"
+            filter_complex = f"{sound_filters[0]};[0:a][s1]amix=inputs=2:duration=first:normalize=0:dropout_transition=0.5[out]"
         else:
             # Mix all sounds
             sound_labels = ''.join([f"[s{i}]" for i, _ in valid_sounds])
             filter_complex = ';'.join(sound_filters)
-            filter_complex += f";{sound_labels}amix=inputs={len(valid_sounds)}:normalize=0[sounds];[0:a][sounds]amix=inputs=2:duration=first:dropout_transition=0.5[out]"
+            filter_complex += f";{sound_labels}amix=inputs={len(valid_sounds)}:normalize=0[sounds];[0:a][sounds]amix=inputs=2:duration=first:normalize=0:dropout_transition=0.5[out]"
 
         cmd = [
             'ffmpeg', '-y',
@@ -228,7 +228,7 @@ class MusicService:
         sounds: list = None,
         music_path: str = None,
         output_path: str = None,
-        sounds_volume_db: float = -6.0,
+        sounds_volume_db: float = 0.0,
         music_volume_db: float = -12.0
     ) -> str:
         """
@@ -269,7 +269,7 @@ class MusicService:
         # Add music input
         music_input_idx = None
         if music_path and os.path.exists(music_path):
-            inputs.extend(['-i', music_path])
+            inputs.extend(['-stream_loop', '-1', '-i', music_path])
             music_input_idx = input_idx
             input_idx += 1
 
@@ -294,7 +294,7 @@ class MusicService:
         filter_complex = ';'.join(filter_parts)
         if filter_complex:
             filter_complex += ';'
-        filter_complex += f"{''.join(mix_inputs)}amix=inputs={num_inputs}:duration=first:dropout_transition=0.5[out]"
+        filter_complex += f"{''.join(mix_inputs)}amix=inputs={num_inputs}:duration=first:normalize=0:dropout_transition=0.5[out]"
 
         cmd = [
             'ffmpeg', '-y',

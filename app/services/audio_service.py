@@ -20,7 +20,7 @@ class AudioService:
     """Service for audio processing with FFmpeg"""
     
     def __init__(self):
-        self.storage_path = settings.storage_path
+        self.storage_path = os.path.abspath(settings.storage_path)
         self.temp_path = os.path.join(self.storage_path, "temp")
         os.makedirs(self.temp_path, exist_ok=True)
     
@@ -286,10 +286,11 @@ class AudioService:
         # FFmpeg command with music volume adjustment and duration match
         filter_complex = f"[1]volume={music_volume}[music];[0][music]amix=inputs=2:duration=first"
         
+        # -stream_loop -1 loops music infinitely until voice ends
         cmd = [
             "ffmpeg", "-y",
             "-i", voice_audio_path,
-            "-i", music_path,
+            "-stream_loop", "-1", "-i", music_path,
             "-filter_complex", filter_complex,
             "-c:a", "libmp3lame",
             "-q:a", str(AUDIO_SETTINGS["output_quality"]),
@@ -370,13 +371,14 @@ class AudioService:
             )
             current_output = "[vs]"
         
-        # Add music
+        # Add music (with loop for long episodes)
         if music_path:
             if music_path.startswith("/storage/"):
                 music_path = os.path.join(self.storage_path, music_path[9:])
-            inputs.extend(["-i", music_path])
+            # -stream_loop -1 loops music until voice ends
+            inputs.extend(["-stream_loop", "-1", "-i", music_path])
             
-            music_idx = len(inputs) // 2
+            music_idx = sum(1 for x in inputs if x == "-i") - 1
             filter_parts.append(f"[{music_idx}]volume={music_volume}[m]")
             filter_parts.append(f"{current_output}[m]amix=inputs=2:duration=first[out]")
             current_output = "[out]"

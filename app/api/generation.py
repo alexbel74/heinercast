@@ -121,8 +121,12 @@ async def generate_script(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Voiceover generation failed: {e}", exc_info=True)
         episode.status = EpisodeStatus.ERROR.value
         episode.error_message = str(e)
+        await db.commit()
         raise
 
 
@@ -222,8 +226,12 @@ async def generate_voiceover(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Voiceover generation failed: {e}", exc_info=True)
         episode.status = EpisodeStatus.ERROR.value
         episode.error_message = str(e)
+        await db.commit()
         raise
 
 
@@ -327,8 +335,12 @@ async def generate_sounds(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Voiceover generation failed: {e}", exc_info=True)
         episode.status = EpisodeStatus.ERROR.value
         episode.error_message = str(e)
+        await db.commit()
         raise
 
 
@@ -375,10 +387,11 @@ async def generate_music(
             current_user.google_drive_credentials
         )
         
-        # Create plan
+        # Create plan (ElevenLabs limit is 300s = 300000ms)
+        limited_duration_ms = min(duration_ms, 300000)
         composition_plan = await elevenlabs_service.create_music_plan(
             prompt=music_prompt,
-            duration_ms=duration_ms
+            duration_ms=limited_duration_ms
         )
         
         # Generate music
@@ -406,8 +419,12 @@ async def generate_music(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Voiceover generation failed: {e}", exc_info=True)
         episode.status = EpisodeStatus.ERROR.value
         episode.error_message = str(e)
+        await db.commit()
         raise
 
 
@@ -460,8 +477,12 @@ async def merge_audio(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Voiceover generation failed: {e}", exc_info=True)
         episode.status = EpisodeStatus.ERROR.value
         episode.error_message = str(e)
+        await db.commit()
         raise
 
 
@@ -569,8 +590,12 @@ async def generate_cover(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Voiceover generation failed: {e}", exc_info=True)
         episode.status = EpisodeStatus.ERROR.value
         episode.error_message = str(e)
+        await db.commit()
         raise
 
 
@@ -743,7 +768,7 @@ async def generate_full(
             atmosphere = project.musical_atmosphere or project.genre_tone
             music_prompt = f"{atmosphere}, instrumental background music"
             
-            composition_plan = await elevenlabs_service.create_music_plan(music_prompt, duration_ms)
+            composition_plan = await elevenlabs_service.create_music_plan(music_prompt, min(duration_ms, 300000))
             music_bytes = await elevenlabs_service.generate_music(composition_plan)
             music_url = await storage_service.save_file(music_bytes, subfolder="audio", extension="mp3")
             
