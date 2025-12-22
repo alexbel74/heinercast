@@ -16,6 +16,114 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+
+# Cover style presets for AI audiobooks
+COVER_STYLES = {
+    "auto": {
+        "name": "Auto (AI выберет)",
+        "instructions": "",
+        "mood": ""
+    },
+    "cyberpunk_neon": {
+        "name": "Cyberpunk Neon",
+        "instructions": "Neon lights, rain-soaked streets, holographic billboards, pink/cyan/purple color scheme, futuristic cityscape, glowing UI elements, reflective surfaces",
+        "mood": "electric, dangerous, high-tech"
+    },
+    "tech_noir": {
+        "name": "Tech Noir", 
+        "instructions": "Dark corporate aesthetics, glass skyscrapers, cold blue lighting, deep shadows, silhouettes against screens, minimal color palette with blue/grey/black",
+        "mood": "mysterious, corporate, cold, ominous"
+    },
+    "digital_glitch": {
+        "name": "Digital Glitch",
+        "instructions": "Pixelated elements, data corruption effects, matrix-style falling code, RGB color split, scan lines, digital artifacts, fragmented imagery",
+        "mood": "unstable, corrupted, digital chaos"
+    },
+    "split_reality": {
+        "name": "Split Reality",
+        "instructions": "Mirror effects, duality theme, person shown twice (human and AI version), fragmented reality, half-human half-digital face, identity crisis visual",
+        "mood": "questioning identity, duality, transformation"
+    },
+    "blade_runner": {
+        "name": "Blade Runner Style",
+        "instructions": "Rainy megacity at night, massive billboards, flying vehicles, dense urban environment, orange and teal color grading, atmospheric fog, retrofuturism",
+        "mood": "melancholic, noir, dystopian beauty"
+    },
+    "clean_futurism": {
+        "name": "Clean Futurism",
+        "instructions": "Minimalist future aesthetics, white and light grey spaces, holographic interfaces, clean lines, soft lighting, Apple-style design, sterile environment",
+        "mood": "pristine, controlled, utopian surface"
+    },
+    "corporate_dystopia": {
+        "name": "Corporate Dystopia",
+        "instructions": "Oppressive office environments, surveillance cameras, identical workers, grey cubicles, corporate logos, dehumanizing architecture, fluorescent lighting",
+        "mood": "oppressive, conformist, soulless"
+    },
+    "neural_network": {
+        "name": "Neural Network",
+        "instructions": "Abstract neural connections, glowing synapses, brain-like structures, data flowing through networks, constellation-like patterns, deep blue and purple",
+        "mood": "intellectual, vast, interconnected"
+    },
+    "holographic": {
+        "name": "Holographic",
+        "instructions": "Translucent holographic projections, light refracting effects, floating UI elements, person interacting with holograms, iridescent colors",
+        "mood": "advanced, ethereal, technological wonder"
+    },
+    "retro_futurism": {
+        "name": "Retro Futurism 80s",
+        "instructions": "1980s vision of future, synthwave aesthetics, chrome and neon, grid lines, sunset gradients, VHS artifacts, geometric shapes",
+        "mood": "nostalgic, stylized, synth-wave"
+    },
+    "photorealistic": {
+        "name": "Photorealistic",
+        "instructions": "Hyperrealistic photography style, real human faces, cinematic lighting, shallow depth of field, movie still quality, natural skin textures",
+        "mood": "grounded, believable, cinematic"
+    },
+    "illustrated_artistic": {
+        "name": "Illustrated Artistic",
+        "instructions": "Digital painting style, visible brush strokes, artistic interpretation, concept art quality, rich colors, stylized proportions",
+        "mood": "artistic, interpretive, expressive"
+    },
+    "minimalist_typography": {
+        "name": "Minimalist",
+        "instructions": "Simple geometric shapes, bold solid colors, negative space, abstract representation, single focal element, clean composition",
+        "mood": "elegant, sophisticated, modern"
+    },
+    "cinematic_poster": {
+        "name": "Cinematic Movie Poster",
+        "instructions": "Hollywood movie poster composition, dramatic character poses, layered depth with background action, epic scale, lens flares, dramatic lighting",
+        "mood": "epic, blockbuster, dramatic"
+    },
+    "dark_atmospheric": {
+        "name": "Dark Atmospheric",
+        "instructions": "Heavy shadows, fog and mist, single light source, mysterious silhouettes, moody color grading, noir influence, tension in composition",
+        "mood": "tense, mysterious, foreboding"
+    },
+    "server_room": {
+        "name": "Server Room / Data Center",
+        "instructions": "Rows of servers with blinking lights, blue LED illumination, cables and hardware, person among machines, technological cathedral",
+        "mood": "overwhelming technology, digital heart"
+    },
+    "surveillance": {
+        "name": "Surveillance State",
+        "instructions": "Multiple camera feeds, facial recognition overlays, tracking data, watched from above, privacy invasion theme, green night vision",
+        "mood": "paranoid, watched, no privacy"
+    },
+    "android_human": {
+        "name": "Android/Human Boundary",
+        "instructions": "Humanoid robots, synthetic skin revealing machinery, uncanny valley aesthetics, human eyes in robot face, identity questioning",
+        "mood": "uncanny, philosophical, boundary-blurring"
+    }
+}
+
+# Diverse style sets for multiple variants
+DIVERSE_STYLE_SETS = {
+    2: [["cyberpunk_neon", "tech_noir"], ["blade_runner", "photorealistic"], ["digital_glitch", "split_reality"]],
+    3: [["cyberpunk_neon", "tech_noir", "split_reality"], ["blade_runner", "dark_atmospheric", "photorealistic"]],
+    4: [["cyberpunk_neon", "tech_noir", "split_reality", "blade_runner"], ["dark_atmospheric", "photorealistic", "digital_glitch", "cinematic_poster"]]
+}
+
+
 class CoverService:
     """Service for kie.ai cover generation"""
     
@@ -245,32 +353,42 @@ class CoverService:
     
     async def generate_multiple_covers(
         self,
-        prompt: str,
+        prompt: str = None,
+        prompts: List[str] = None,
         count: int = 1,
         reference_image_urls: Optional[List[str]] = None,
         aspect_ratio: str = "1:1",
         resolution: str = "2K"
     ) -> List[str]:
         """
-        Generate multiple cover variants.
-        
+        Generate multiple cover variants with different prompts.
+
         Args:
-            prompt: Image generation prompt
+            prompt: Single prompt (used for all if prompts not provided)
+            prompts: List of different prompts for each variant
             count: Number of variants (1-4)
-            reference_image_url: Optional reference image URL
+            reference_image_urls: Optional reference image URLs
             aspect_ratio: Image aspect ratio
             resolution: Image resolution
-        
+
         Returns:
             List of image URLs
         """
         count = max(1, min(4, count))  # Clamp to 1-4
         
-        # Start all generations in parallel
+        # Build prompts list
+        if prompts and len(prompts) >= count:
+            prompt_list = prompts[:count]
+        elif prompt:
+            prompt_list = [prompt] * count
+        else:
+            raise ValueError("Either prompt or prompts must be provided")
+
+        # Start all generations in parallel with different prompts
         tasks = []
-        for _ in range(count):
+        for i in range(count):
             task = self.generate_cover_and_wait(
-                prompt=prompt,
+                prompt=prompt_list[i],
                 reference_image_urls=reference_image_urls,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution
@@ -293,39 +411,86 @@ class CoverService:
         
         return urls
     
+    def get_styles_for_variants(self, num_variants: int, preferred_style: str = "auto") -> list:
+        """Get list of styles for multiple variants."""
+        if num_variants == 1:
+            return [preferred_style if preferred_style != "auto" else "dark_atmospheric"]
+        
+        if preferred_style != "auto":
+            all_styles = list(COVER_STYLES.keys())
+            all_styles.remove("auto")
+            if preferred_style in all_styles:
+                all_styles.remove(preferred_style)
+            import random
+            random.shuffle(all_styles)
+            return [preferred_style] + all_styles[:num_variants-1]
+        
+        import random
+        style_sets = DIVERSE_STYLE_SETS.get(num_variants, DIVERSE_STYLE_SETS[4])
+        chosen_set = random.choice(style_sets) if style_sets else list(COVER_STYLES.keys())[1:num_variants+1]
+        return chosen_set[:num_variants]
+
     def build_cover_prompt(
         self,
         title: str,
         genre_tone: str,
         description: str,
-        template: Optional[str] = None
+        template: Optional[str] = None,
+        style: str = "auto",
+        episode_number: Optional[int] = None,
+        project_title: Optional[str] = None,
+        additional_instructions: Optional[str] = None,
+        summary: Optional[str] = None
     ) -> str:
-        """
-        Build a cover generation prompt from episode/project data.
-        
-        Args:
-            title: Story/episode title
-            genre_tone: Genre and tone
-            description: Story description
-            template: Optional custom template
-        
-        Returns:
-            Formatted prompt string
-        """
-        if template:
+        """Build a cover generation prompt with style support."""
+        if template and template.strip():
             return template.format(
                 title=title,
                 genre_tone=genre_tone,
                 description=description
             )
-        
-        # Default prompt
-        return f"""Create a cinematic audiobook cover for:
-Title: {title}
-Genre: {genre_tone}
-Description: {description[:500]}
 
-Style: Dark, atmospheric, professional audiobook cover art
-Mood: Dramatic, cinematic
-Format: Square, suitable for podcast/audiobook platforms
-Do not include any text or letters in the image."""
+        # Get style settings
+        style_data = COVER_STYLES.get(style, COVER_STYLES.get("auto", {}))
+        style_instructions = style_data.get("instructions", "")
+        style_mood = style_data.get("mood", "dramatic, cinematic")
+        
+        # Build series info
+        series_info = ""
+        if project_title:
+            series_info = f"Series: {project_title}\n"
+        if episode_number:
+            series_info += f"Episode: #{episode_number}\n"
+
+        # Build style section
+        if style != "auto" and style_instructions:
+            style_section = f"""
+VISUAL STYLE: {style_data.get('name', style)}
+{style_instructions}
+Mood: {style_mood}"""
+        else:
+            style_section = """
+VISUAL STYLE: Cinematic, atmospheric, professional audiobook cover art
+Dark and moody lighting, high production value
+Mood: Dramatic, suspenseful, technological"""
+
+        # Additional instructions
+        extra = ""
+        if additional_instructions:
+            extra = f"\n\nADDITIONAL REQUIREMENTS:\n{additional_instructions}"
+
+        return f"""Create a professional audiobook cover image.
+
+STORY CONTENT:
+{series_info}Title: {title}
+Genre: {genre_tone}
+Synopsis: {(summary if summary else description)[:500]}
+{style_section}
+
+COMPOSITION & TEXT:
+- Main visual in CENTER - striking and memorable
+- High contrast for readability at small sizes
+- Add text overlay:
+  * TOP: "AUDIOBOOK" small text + series name
+  * BOTTOM: Episode title in large cinematic font
+- Professional typography with good contrast{extra}"""

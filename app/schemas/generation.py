@@ -87,6 +87,7 @@ class MergeAudioResponse(BaseModel):
 
 class GenerateCoverRequest(BaseModel):
     """Schema for cover generation request"""
+    style: str = Field(default="auto", description="Cover style preset")
     variants_count: int = Field(default=1, ge=1, le=4)
     aspect_ratio: str = Field(default="1:1", pattern="^(1:1|16:9|9:16|4:3|3:4)$")
     reference_images: Optional[List[str]] = Field(default=None, max_length=3)

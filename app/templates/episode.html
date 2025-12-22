@@ -106,6 +106,30 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label>Cover Style</label>
+                    <select id="cover-style" class="form-control">
+                        <option value="auto">🎲 Auto (different styles for each variant)</option>
+                        <option value="cyberpunk_neon">🌃 Cyberpunk Neon</option>
+                        <option value="tech_noir">🏢 Tech Noir</option>
+                        <option value="digital_glitch">📟 Digital Glitch</option>
+                        <option value="split_reality">🪞 Split Reality</option>
+                        <option value="blade_runner">🌧️ Blade Runner</option>
+                        <option value="clean_futurism">⬜ Clean Futurism</option>
+                        <option value="corporate_dystopia">🏭 Corporate Dystopia</option>
+                        <option value="neural_network">🧠 Neural Network</option>
+                        <option value="holographic">✨ Holographic</option>
+                        <option value="retro_futurism">📼 Retro Futurism 80s</option>
+                        <option value="photorealistic">📸 Photorealistic</option>
+                        <option value="illustrated_artistic">🎨 Illustrated Artistic</option>
+                        <option value="minimalist_typography">◻️ Minimalist</option>
+                        <option value="cinematic_poster">🎬 Cinematic Movie Poster</option>
+                        <option value="dark_atmospheric">🌑 Dark Atmospheric</option>
+                        <option value="server_room">💾 Server Room</option>
+                        <option value="surveillance">👁️ Surveillance State</option>
+                        <option value="android_human">🤖 Android/Human</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Additional Instructions (optional)</label>
                     <textarea id="custom-prompt" class="form-control" rows="3" placeholder="e.g. Use character from image 1, style from image 2, add logo from image 3..."></textarea>
                 </div>
@@ -700,6 +724,7 @@ async function startCoverGeneration() {
     const refs = referenceImages.filter(r => r !== null);
     const variantsCount = parseInt(document.getElementById("variants-count").value);
     const aspectRatio = document.getElementById("aspect-ratio").value;
+    const coverStyle = document.getElementById("cover-style").value;
     const customPrompt = document.getElementById("custom-prompt").value || null;
 
     // Close modal and show toast immediately
@@ -710,6 +735,7 @@ async function startCoverGeneration() {
         const result = await api.post(`/api/generation/cover/${episodeId}`, {
             variants_count: variantsCount,
             aspect_ratio: aspectRatio,
+            style: coverStyle,
             reference_images: refs.length > 0 ? refs : null,
             custom_prompt: customPrompt
         });
