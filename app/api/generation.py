@@ -105,6 +105,14 @@ async def generate_script(
         summary_service = SummaryService(current_user)
         episode.script_text = summary_service.build_script_text_from_json(script)
         
+
+        # Generate summary for future continuations
+        try:
+            summary = await summary_service.generate_summary(episode)
+            episode.summary = summary
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to generate summary: {e}")
         # Update title if auto-generated
         if episode.title_auto_generated and script.get("story_title"):
             episode.title = script["story_title"]

@@ -220,6 +220,11 @@ function renderActions() {
             <button class="btn btn-outline" onclick="downloadAudio()">📥 Download Audio</button>
             <button class="btn btn-primary" onclick="createContinuation()">Create Continuation</button>
         `;
+    } else if (status.endsWith('_generating')) {
+        html = `
+            <span class="generating-status">⏳ ${status.replace('_generating', '').replace('_', ' ')} in progress...</span>
+            <button class="btn btn-outline btn-danger" onclick="resetGeneration()">🔄 Reset</button>
+        `;
     } else if (status === 'error') {
         html = `<button class="btn btn-primary" onclick="retryGeneration()">Retry</button>`;
     }
@@ -880,6 +885,20 @@ function downloadAudio() {
 
 function downloadCover() {
     window.open(`/api/files/cover/${episodeId}`, '_blank');
+}
+
+
+async function resetGeneration() {
+    if (!confirm("Reset current generation? This will cancel the process and clear partial data.")) {
+        return;
+    }
+    try {
+        const result = await api.post(`/api/episodes/${episodeId}/reset`);
+        showToast(result.message || "Generation reset successfully", "success");
+        await loadEpisode();
+    } catch (error) {
+        showError(error, "Reset generation");
+    }
 }
 
 async function createContinuation() {

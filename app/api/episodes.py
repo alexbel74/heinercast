@@ -409,3 +409,63 @@ async def delete_episode_audio(
     await db.commit()
     
     return {"message": "Audio deleted"}
+
+
+@router.post("/{episode_id}/reset")
+async def reset_episode_generation(
+    episode: Episode = Depends(verify_episode_ownership),
+    db: AsyncSession = Depends(get_db)
+):
+    """Reset stuck generation to previous stable status"""
+    
+    status = episode.status
+    reset_info = {"old_status": status, "new_status": None, "cleared": []}
+    
+    if status == "script_generating":
+        episode.status = "draft"
+        episode.script_json = None
+        episode.script_text = None
+        episode.summary = None
+        reset_info["new_status"] = "draft"
+        reset_info["cleared"] = ["script_json", "script_text", "summary"]
+        
+    elif status == "voiceover_generating":
+        episode.status = EpisodeStatus.SCRIPT_DONE.value
+        episode.voice_audio_url = None
+        episode.voice_audio_duration_seconds = None
+        episode.voice_timestamps_json = None
+        reset_info["new_status"] = "script_done"
+        reset_info["cleared"] = ["voice_audio_url", "voice_timestamps"]
+        
+    elif status == "sounds_generating":
+        episode.status = EpisodeStatus.VOICEOVER_DONE.value
+        episode.sounds_json = None
+        reset_info["new_status"] = "voiceover_done"
+        reset_info["cleared"] = ["sounds_json"]
+        
+    elif status == "music_generating":
+        episode.status = EpisodeStatus.VOICEOVER_DONE.value
+        episode.music_url = None
+        episode.music_composition_plan = None
+        reset_info["new_status"] = "voiceover_done"
+        reset_info["cleared"] = ["music_url", "music_composition_plan"]
+        
+    elif status == "cover_generating":
+        episode.status = EpisodeStatus.VOICEOVER_DONE.value
+        # Keep current status but clear cover data
+        episode.cover_url = None
+        episode.cover_variants_json = None
+        reset_info["new_status"] = "voiceover_done"
+        reset_info["cleared"] = ["cover_url", "cover_variants"]
+        
+    else:
+        raise BusinessLogicError(f"Cannot reset status '{status}' - not a generating status")
+    
+    episode.error_message = None
+    episode.updated_at = datetime.utcnow()
+    await db.commit()
+    
+    return {
+        "message": f"Reset from {reset_info['old_status']} to {reset_info['new_status']}",
+        "cleared_fields": reset_info["cleared"]
+    }

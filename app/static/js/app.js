@@ -576,7 +576,11 @@ function showError(error, context = '') {
         finalMessage += ` (${code})`;
     }
     
-    showToast(finalMessage, 'error');
+    if (message.includes('already in progress')) {
+        showToast('⏳ ' + translatedMessage, 'info');
+    } else {
+        showToast(finalMessage, 'error');
+    }
     
     // Log full details to console
     console.error('[HeinerCast] Full error:', { 
