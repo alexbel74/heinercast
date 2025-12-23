@@ -443,14 +443,7 @@ class CoverService:
         summary: Optional[str] = None
     ) -> str:
         """Build a cover generation prompt with style support."""
-        if template and template.strip():
-            return template.format(
-                title=title,
-                genre_tone=genre_tone,
-                description=description
-            )
-
-        # Get style settings
+        # Get style settings (always needed)
         style_data = COVER_STYLES.get(style, COVER_STYLES.get("auto", {}))
         style_instructions = style_data.get("instructions", "")
         style_mood = style_data.get("mood", "dramatic, cinematic")
@@ -479,18 +472,57 @@ Mood: Dramatic, suspenseful, technological"""
         if additional_instructions:
             extra = f"\n\nADDITIONAL REQUIREMENTS:\n{additional_instructions}"
 
-        return f"""Create a professional audiobook cover image.
+        # Extract episode title without "Эпизод X —" prefix
+        episode_title_clean = title
+        if " — " in title:
+            episode_title_clean = title.split(" — ", 1)[-1]
+        
+        # Build synopsis
+        synopsis_text = (summary if summary else description)[:500]
+        
+        # Default prompt template
+        default_template = """Create a professional audiobook cover image.
 
 STORY CONTENT:
 {series_info}Title: {title}
 Genre: {genre_tone}
-Synopsis: {(summary if summary else description)[:500]}
+Synopsis: {synopsis}
 {style_section}
 
 COMPOSITION & TEXT:
 - Main visual in CENTER - striking and memorable
 - High contrast for readability at small sizes
 - Add text overlay:
-  * TOP: "AUDIOBOOK" small text + series name
-  * BOTTOM: Episode title in large cinematic font
-- Professional typography with good contrast{extra}"""
+  * TOP: "АУДИОКНИГА" (small elegant text)
+  * BELOW TOP: "{series_name} {episode_num}" (series + number)
+  * CENTER: "{episode_title}" (main title, large cinematic font)
+- Professional typography with good contrast against background{extra}"""
+
+        # Use custom template if provided, otherwise default
+        prompt_template = template if template and template.strip() else default_template
+        
+        # Format the template
+        try:
+            return prompt_template.format(
+                series_info=series_info,
+                title=title,
+                genre_tone=genre_tone,
+                synopsis=synopsis_text,
+                style_section=style_section,
+                series_name=project_title or "",
+                episode_num=episode_number or "",
+                episode_title=episode_title_clean,
+                extra=extra
+            )
+        except KeyError:
+            return default_template.format(
+                series_info=series_info,
+                title=title,
+                genre_tone=genre_tone,
+                synopsis=synopsis_text,
+                style_section=style_section,
+                series_name=project_title or "",
+                episode_num=episode_number or "",
+                episode_title=episode_title_clean,
+                extra=extra
+            )
