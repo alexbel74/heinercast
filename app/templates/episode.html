@@ -248,6 +248,7 @@ function renderActions() {
         html = `<button class="btn btn-primary" onclick="retryGeneration()">Retry</button>`;
     }
     
+    html += ' <button class="btn btn-outline btn-danger" onclick="deleteEpisode()" title="Delete Episode">🗑️ Delete</button>';
     return html;
 }
 
@@ -1142,6 +1143,22 @@ async function deleteMerged() {
         }
     } catch (error) {
         showError(error, "Delete merged");
+    }
+}
+
+
+async function deleteEpisode() {
+    if (!confirm("Удалить этот эпизод? Все файлы (скрипт, аудио, обложки) будут удалены!")) return;
+    try {
+        const result = await api.delete(`/api/episodes/${episodeId}`);
+        if (result.ok) {
+            showToast("Эпизод удалён", "success");
+            window.location.href = `/projects/${episode.project_id}`;
+        } else {
+            showError(result.error || "Failed to delete episode");
+        }
+    } catch (error) {
+        showError(error, "Delete episode");
     }
 }
 
