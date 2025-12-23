@@ -11,9 +11,34 @@ from app.config import get_settings, KIEAI_BASE_URL, KIEAI_ENDPOINTS
 from app.core.exceptions import KieAIError, MissingAPIKeyError
 from app.core.security import decrypt_api_key
 from app.models.user import User
+from sqlalchemy import select
+from app.database import async_sessionmaker
+from app.models.cover_style import CoverStyle
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+async def load_styles_from_db() -> dict:
+    """Load cover styles from database"""
+    try:
+        async with async_sessionmaker() as session:
+            result = await session.execute(
+                select(CoverStyle).where(CoverStyle.is_active == True).order_by(CoverStyle.sort_order)
+            )
+            styles = result.scalars().all()
+            return {
+                s.key: {
+                    "name": s.name,
+                    "emoji": s.emoji,
+                    "instructions": s.instructions,
+                    "mood": s.mood
+                }
+                for s in styles
+            }
+    except Exception as e:
+        logger.warning(f"Could not load styles from DB: {e}")
+        return COVER_STYLES
 
 
 

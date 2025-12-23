@@ -3,6 +3,21 @@
 {% block title %}Settings - HeinerCast{% endblock %}
 
 {% block content %}
+<style>
+.styles-list { margin: 1rem 0; }
+.style-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-bottom: 1px solid #333; }
+.style-item:hover { background: rgba(255,255,255,0.05); }
+.style-emoji { font-size: 1.2rem; width: 2rem; }
+.style-name { flex: 1; font-weight: 500; }
+.style-key { color: #888; font-size: 0.85rem; }
+.style-active { width: 1.5rem; }
+.btn-icon { background: none; border: none; cursor: pointer; padding: 0.25rem; font-size: 1rem; }
+.btn-icon:hover { opacity: 0.7; }
+.modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-content { background: #1a1a2e; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+.modal-content h3 { margin-top: 0; }
+.form-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1rem; }
+</style>
 <div class="settings-page">
     <h1>Settings</h1>
     
@@ -116,6 +131,47 @@
                 <button type="submit" class="btn btn-primary">Save kie.ai Settings</button>
             </form>
         </div>
+
+        <div class="settings-card">
+            <h2>Cover Styles</h2>
+            <p class="settings-description">Manage cover art styles for different types of books</p>
+            <div id="styles-list" class="styles-list"></div>
+            <button type="button" class="btn btn-secondary" onclick="showAddStyleModal()">+ Add New Style</button>
+        </div>
+
+        <!-- Add/Edit Style Modal -->
+        <div id="style-modal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <h3 id="style-modal-title">Add New Style</h3>
+                <form id="style-form" onsubmit="saveStyle(event)">
+                    <input type="hidden" id="style-id">
+                    <div class="form-group">
+                        <label>Key (unique identifier)</label>
+                        <input type="text" id="style-key" required pattern="^[a-z0-9_]+$" placeholder="e.g. fairy_tale">
+                    </div>
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="style-name" required placeholder="e.g. Fairy Tale">
+                    </div>
+                    <div class="form-group">
+                        <label>Emoji</label>
+                        <input type="text" id="style-emoji" maxlength="4" placeholder="🧚">
+                    </div>
+                    <div class="form-group">
+                        <label>Instructions (for AI image generation)</label>
+                        <textarea id="style-instructions" rows="4" required placeholder="Magical forest, soft pastel colors, fairy dust particles..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Mood</label>
+                        <input type="text" id="style-mood" required placeholder="magical, whimsical, enchanting">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeStyleModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Style</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
     
     <!-- Prompts Tab -->
@@ -161,7 +217,7 @@
 </div>
 
 <!-- Create API Key Modal -->
-<div class="modal" id="create-apikey-modal">
+<div class="modal" id="create-apikey-modal" style="display:none">
     <div class="modal-content">
         <div class="modal-header">
             <h2>Create API Key</h2>
@@ -186,7 +242,7 @@
 </div>
 
 <!-- Show API Key Modal -->
-<div class="modal" id="show-apikey-modal">
+<div class="modal" id="show-apikey-modal" style="display:none">
     <div class="modal-content">
         <div class="modal-header">
             <h2>API Key Created</h2>
@@ -205,6 +261,10 @@
 <script>
 let settings = null;
 let providers = {};
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = "none";
+}
 
 async function loadSettings() {
     try {
@@ -444,7 +504,7 @@ async function loadAPIKeys() {
 
 function showCreateAPIKeyModal() {
     document.getElementById('create-apikey-form').reset();
-    document.getElementById('create-apikey-modal').classList.add('active');
+    document.getElementById('create-apikey-modal').style.display = 'flex';
 }
 
 async function createAPIKey(event) {
@@ -459,7 +519,7 @@ async function createAPIKey(event) {
         if (result.ok && result.data) {
             closeModal('create-apikey-modal');
             document.getElementById('new-api-key').textContent = result.data.api_key;
-            document.getElementById('show-apikey-modal').classList.add('active');
+            document.getElementById('show-apikey-modal').style.display = 'flex';
             loadAPIKeys();
         }
         // Error already shown by handleResponse
@@ -501,5 +561,111 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
 
 // Load on page load
 document.addEventListener('DOMContentLoaded', loadSettings);
+
+// Cover Styles Management
+let coverStyles = [];
+
+async function loadCoverStyles() {
+    try {
+        const result = await api.get("/api/cover-styles");
+        coverStyles = result.data || result;
+        renderStylesList();
+    } catch (e) {
+        console.error("Failed to load styles:", e);
+    }
+}
+
+function renderStylesList() {
+    const list = document.getElementById("styles-list");
+    if (!list) return;
+    list.innerHTML = coverStyles.map(s => `
+        <div class="style-item" data-id="${s.id}">
+            <span class="style-emoji">${s.emoji}</span>
+            <span class="style-name">${s.name}</span>
+            <span class="style-key">(${s.key})</span>
+            <span class="style-active">${s.is_active ? "✓" : "○"}</span>
+            <button class="btn-icon" onclick="editStyle('${s.id}')" title="Edit">✏️</button>
+            <button class="btn-icon" onclick="toggleStyle('${s.id}', ${!s.is_active})" title="Toggle">${s.is_active ? "🔴" : "🟢"}</button>
+            ${s.key !== "auto" ? `<button class="btn-icon" onclick="deleteStyle('${s.id}')" title="Delete">🗑️</button>` : ""}
+        </div>
+    `).join("");
+}
+
+function showAddStyleModal() {
+    document.getElementById("style-modal-title").textContent = "Add New Style";
+    document.getElementById("style-id").value = "";
+    document.getElementById("style-key").value = "";
+    document.getElementById("style-key").disabled = false;
+    document.getElementById("style-name").value = "";
+    document.getElementById("style-emoji").value = "🎨";
+    document.getElementById("style-instructions").value = "";
+    document.getElementById("style-mood").value = "";
+    document.getElementById("style-modal").style.display = "flex";
+}
+
+function editStyle(id) {
+    const style = coverStyles.find(s => s.id === id);
+    if (!style) return;
+    document.getElementById("style-modal-title").textContent = "Edit Style";
+    document.getElementById("style-id").value = style.id;
+    document.getElementById("style-key").value = style.key;
+    document.getElementById("style-key").disabled = true;
+    document.getElementById("style-name").value = style.name;
+    document.getElementById("style-emoji").value = style.emoji;
+    document.getElementById("style-instructions").value = style.instructions;
+    document.getElementById("style-mood").value = style.mood;
+    document.getElementById("style-modal").style.display = "flex";
+}
+
+function closeStyleModal() {
+    document.getElementById("style-modal").style.display = "none";
+}
+
+async function saveStyle(event) {
+    event.preventDefault();
+    const id = document.getElementById("style-id").value;
+    const data = {
+        key: document.getElementById("style-key").value,
+        name: document.getElementById("style-name").value,
+        emoji: document.getElementById("style-emoji").value || "🎨",
+        instructions: document.getElementById("style-instructions").value,
+        mood: document.getElementById("style-mood").value
+    };
+    try {
+        if (id) {
+            await api.put(`/api/cover-styles/${id}`, data);
+        } else {
+            await api.post("/api/cover-styles", data);
+        }
+        closeStyleModal();
+        loadCoverStyles();
+        showToast("Style saved!", "success");
+    } catch (e) {
+        showToast("Failed to save style", "error");
+    }
+}
+
+async function toggleStyle(id, active) {
+    try {
+        await api.put(`/api/cover-styles/${id}`, { is_active: active });
+        loadCoverStyles();
+    } catch (e) {
+        showToast("Failed to toggle style", "error");
+    }
+}
+
+async function deleteStyle(id) {
+    if (!confirm("Delete this style?")) return;
+    try {
+        await api.delete(`/api/cover-styles/${id}`);
+        loadCoverStyles();
+        showToast("Style deleted", "success");
+    } catch (e) {
+        showToast("Failed to delete style", "error");
+    }
+}
+
+// Load styles when page loads
+document.addEventListener("DOMContentLoaded", loadCoverStyles);
 </script>
 {% endblock %}

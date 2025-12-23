@@ -108,25 +108,7 @@
                 <div class="form-group">
                     <label>Cover Style</label>
                     <select id="cover-style" class="form-control">
-                        <option value="auto">🎲 Auto (different styles for each variant)</option>
-                        <option value="cyberpunk_neon">🌃 Cyberpunk Neon</option>
-                        <option value="tech_noir">🏢 Tech Noir</option>
-                        <option value="digital_glitch">📟 Digital Glitch</option>
-                        <option value="split_reality">🪞 Split Reality</option>
-                        <option value="blade_runner">🌧️ Blade Runner</option>
-                        <option value="clean_futurism">⬜ Clean Futurism</option>
-                        <option value="corporate_dystopia">🏭 Corporate Dystopia</option>
-                        <option value="neural_network">🧠 Neural Network</option>
-                        <option value="holographic">✨ Holographic</option>
-                        <option value="retro_futurism">📼 Retro Futurism 80s</option>
-                        <option value="photorealistic">📸 Photorealistic</option>
-                        <option value="illustrated_artistic">🎨 Illustrated Artistic</option>
-                        <option value="minimalist_typography">◻️ Minimalist</option>
-                        <option value="cinematic_poster">🎬 Cinematic Movie Poster</option>
-                        <option value="dark_atmospheric">🌑 Dark Atmospheric</option>
-                        <option value="server_room">💾 Server Room</option>
-                        <option value="surveillance">👁️ Surveillance State</option>
-                        <option value="android_human">🤖 Android/Human</option>
+                        <option value="auto">🎲 Loading styles...</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -157,6 +139,19 @@
 const episodeId = '{{ episode_id }}';
 let episode = null;
 let pollInterval = null;
+
+async function loadCoverStyles() {
+    try {
+        const result = await api.get("/api/cover-styles?active_only=true");
+        const styles = result.data || result;
+        const select = document.getElementById("cover-style");
+        select.innerHTML = styles.map(s => 
+            `<option value="${s.key}">${s.emoji} ${s.name}</option>`
+        ).join("");
+    } catch (e) {
+        console.error("Failed to load cover styles:", e);
+    }
+}
 
 async function loadEpisode() {
     try {
@@ -1150,7 +1145,7 @@ async function deleteMerged() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', loadEpisode);
+document.addEventListener('DOMContentLoaded', () => { loadEpisode(); loadCoverStyles(); });
 
 // Cleanup on page leave
 window.addEventListener('beforeunload', () => {

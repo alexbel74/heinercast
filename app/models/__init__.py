@@ -17,3 +17,4 @@ __all__ = [
     "EpisodeStatus",
     "APIKey"
 ]
+from app.models.cover_style import CoverStyle

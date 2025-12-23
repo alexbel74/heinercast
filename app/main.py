@@ -18,6 +18,7 @@ from app.core.middleware import SecurityHeadersMiddleware
 
 # Import API routers
 from app.api.auth import router as auth_router
+from app.api.cover_styles import router as cover_styles_router
 from app.api.users import router as users_router
 from app.api.projects import router as projects_router
 from app.api.episodes import router as episodes_router
@@ -154,6 +155,7 @@ app.include_router(users_router, prefix="/api/users", tags=["Users"])
 app.include_router(projects_router, prefix="/api/projects", tags=["Projects"])
 app.include_router(episodes_router, prefix="/api/episodes", tags=["Episodes"])
 app.include_router(voices_router, prefix="/api/voices", tags=["Voices"])
+app.include_router(cover_styles_router)
 app.include_router(generation_router, prefix="/api/generation", tags=["Generation"])
 app.include_router(files_router, prefix="/api/files", tags=["Files"])
 app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
