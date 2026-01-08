@@ -259,6 +259,127 @@ async def delete_project(
     return {"message": "Project deleted"}
 
 
+
+# Statistics endpoint
+@router.get("/{project_id}/stats")
+async def get_project_stats(
+    project: Project = Depends(verify_project_ownership),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get project statistics"""
+    from sqlalchemy import func, distinct
+    from app.models.episode import Episode
+    from app.models.project_character import ProjectCharacter
+    from app.models.voice import Voice
+    
+    # Episodes count and duration
+    episodes_result = await db.execute(
+        select(
+            func.count(Episode.id).label("episodes_count"),
+            func.coalesce(func.sum(func.coalesce(Episode.final_audio_duration_seconds, Episode.voice_audio_duration_seconds)), 0).label("total_duration")
+        ).where(Episode.project_id == project.id)
+    )
+    eps_stats = episodes_result.first()
+    
+    # Voices used
+    voices_result = await db.execute(
+        select(Voice.name, ProjectCharacter.role, ProjectCharacter.character_name)
+        .join(ProjectCharacter, Voice.id == ProjectCharacter.voice_id)
+        .where(ProjectCharacter.project_id == project.id)
+    )
+    voices = [{"name": v.name, "role": v.role, "character": v.character_name} for v in voices_result.all()]
+    
+    # Episodes by status
+    status_result = await db.execute(
+        select(Episode.status, func.count(Episode.id))
+        .where(Episode.project_id == project.id)
+        .group_by(Episode.status)
+    )
+    by_status = {row[0]: row[1] for row in status_result.all()}
+    
+    total_seconds = int(eps_stats.total_duration or 0)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    
+    return {
+        "project_id": str(project.id),
+        "episodes_count": eps_stats.episodes_count,
+        "total_duration_seconds": total_seconds,
+        "total_duration_formatted": f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s",
+        "voices": voices,
+        "episodes_by_status": by_status
+    }
+
+# Export endpoint
+@router.get("/{project_id}/export")
+async def export_project(
+    project: Project = Depends(verify_project_ownership),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export all project audio files as ZIP"""
+    
+    # Transliteration map for Cyrillic
+    translit_map = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+        'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+        'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo',
+        'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+        'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+        'Ф': 'F', 'Х': 'H', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch',
+        'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',
+        ' ': '_', ':': '-', '/': '_', '—': '-'
+    }
+    
+    def translit(text):
+        return ''.join(translit_map.get(c, c) for c in text)
+    import zipfile
+    import io
+    import os
+    from fastapi.responses import StreamingResponse
+    from app.models.episode import Episode
+    
+    # Get all episodes
+    result = await db.execute(
+        select(Episode).where(Episode.project_id == project.id).order_by(Episode.episode_number)
+    )
+    episodes = result.scalars().all()
+    
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    base_path = "/var/www/heinercast"
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for ep in episodes:
+            # Add final audio or voice audio
+            audio_url = ep.final_audio_url or ep.voice_audio_url
+            if audio_url:
+                file_path = os.path.join(base_path, audio_url.lstrip("/"))
+                if os.path.exists(file_path):
+                    filename = f"{ep.episode_number:02d}_{translit(ep.title)}.mp3"
+                    zf.write(file_path, filename)
+            
+            # Add cover if exists
+            if ep.cover_url:
+                cover_path = os.path.join(base_path, ep.cover_url.lstrip("/"))
+                if os.path.exists(cover_path):
+                    cover_name = f"{ep.episode_number:02d}_{translit(ep.title)}_cover.png"
+                    zf.write(cover_path, cover_name)
+    
+    zip_buffer.seek(0)
+    safe_title = project.title.replace(" ", "_").replace("/", "_")
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={translit(project.title)}.zip"}
+    )
+
+
+
 # Characters endpoints
 @router.get("/{project_id}/characters", response_model=List[ProjectCharacterResponse])
 async def list_project_characters(

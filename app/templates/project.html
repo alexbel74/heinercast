@@ -4,9 +4,35 @@
 
 {% block content %}
 <div class="project-page">
+<style>
+.project-stats {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--bg-secondary, #f5f5f5);
+    border-radius: 8px;
+}
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary, #007bff);
+}
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #666);
+}
+</style>
+
     <div class="page-header">
         <a href="/dashboard" class="back-link">← Back to Projects</a>
         <div class="page-actions">
+            <button class="btn btn-outline" onclick="exportProject()">📦 Export</button>
             <button class="btn btn-outline" onclick="showEditProjectModal()">Edit</button>
             <button class="btn btn-danger-outline" onclick="confirmDeleteProject()">Delete</button>
         </div>
@@ -171,6 +197,7 @@ async function loadProject() {
             project = result.data;
             renderProject();
             loadVoices();
+            loadStats();
         }
     } catch (error) {
         showError(error, 'Load project');
@@ -187,7 +214,40 @@ async function loadVoices() {
     } catch (error) {
         console.error('Failed to load voices', error);
     }
+
 }
+async function loadStats() {
+    try {
+        const result = await api.get(`/api/projects/${projectId}/stats`);
+        if (result.ok && result.data) {
+            renderStats(result.data);
+        }
+    } catch (error) {
+        console.error("Failed to load stats", error);
+    }
+}
+
+function renderStats(stats) {
+    const statsHtml = `
+        <div class="project-stats">
+            <div class="stat-item">
+                <span class="stat-value">${stats.episodes_count}</span>
+                <span class="stat-label">Episodes</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">${stats.total_duration_formatted}</span>
+                <span class="stat-label">Total Duration</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">${stats.voices.length}</span>
+                <span class="stat-label">Voices</span>
+            </div>
+        </div>
+    `;
+    const infoDiv = document.getElementById("project-info");
+    infoDiv.insertAdjacentHTML("beforeend", statsHtml);
+}
+
 
 function updateVoiceSelect() {
     const select = document.getElementById('char-voice');
@@ -401,6 +461,12 @@ async function createEpisode(event) {
     } catch (error) {
         showError(error, 'Create episode');
     }
+}
+
+
+function exportProject() {
+    showToast("Preparing ZIP archive...", "info");
+    window.location.href = `/api/projects/${projectId}/export`;
 }
 
 async function confirmDeleteProject() {
