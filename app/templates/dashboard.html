@@ -35,6 +35,12 @@
         </div>
         <form id="create-project-form" onsubmit="createProject(event)">
             <div class="form-group">
+                <label for="project-template">Use Template (optional)</label>
+                <select id="project-template" onchange="applyTemplate()">
+                    <option value="">-- Start from scratch --</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="project-title">Title *</label>
                 <input type="text" id="project-title" required maxlength="200"
                        placeholder="e.g., City Without Jobs">
@@ -122,6 +128,42 @@ async function loadProjects() {
     }
 }
 
+let templates = [];
+
+async function loadTemplates() {
+    try {
+        const result = await api.get('/api/templates');
+        if (result.ok && result.data) {
+            templates = result.data;
+            const select = document.getElementById('project-template');
+            select.innerHTML = '<option value="">-- Start from scratch --</option>' +
+                templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load templates', error);
+    }
+}
+
+function applyTemplate() {
+    const select = document.getElementById('project-template');
+    const templateId = select.value;
+    if (!templateId) return;
+    
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    
+    document.getElementById('project-genre').value = template.genre_tone || '';
+    document.getElementById('project-atmosphere').value = template.musical_atmosphere || '';
+    document.getElementById('project-sounds').checked = template.include_sound_effects;
+    document.getElementById('project-music').checked = template.include_background_music;
+    
+    // Store characters for later use when creating project
+    window.templateCharacters = template.characters_json || [];
+    if (window.templateCharacters.length > 0) {
+        showToast(`Template has ${window.templateCharacters.length} character(s)`, 'info');
+    }
+}
+
 function showCreateProjectModal() {
     document.getElementById('create-project-modal').classList.add('active');
 }
@@ -146,9 +188,23 @@ async function createProject(event) {
         const result = await api.post('/api/projects', projectData);
         
         if (result.ok && result.data) {
+            const projectId = result.data.id;
+            
+            // Add characters from template if any
+            if (window.templateCharacters && window.templateCharacters.length > 0) {
+                for (const char of window.templateCharacters) {
+                    await api.post(`/api/projects/${projectId}/characters`, {
+                        voice_id: char.voice_id,
+                        role: char.role,
+                        character_name: char.character_name
+                    });
+                }
+                window.templateCharacters = [];
+            }
+            
             showToast('Project created successfully!', 'success');
             closeModal('create-project-modal');
-            window.location.href = `/projects/${result.data.id}`;
+            window.location.href = `/projects/${projectId}`;
         }
         // Error already shown by handleResponse
     } catch (error) {
@@ -160,6 +216,6 @@ async function createProject(event) {
 }
 
 // Load projects on page load
-document.addEventListener('DOMContentLoaded', loadProjects);
+document.addEventListener('DOMContentLoaded', () => { loadProjects(); loadTemplates(); });
 </script>
 {% endblock %}

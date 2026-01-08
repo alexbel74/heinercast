@@ -27,6 +27,7 @@
         <button class="settings-tab" data-tab="elevenlabs">ElevenLabs</button>
         <button class="settings-tab" data-tab="covers">Covers</button>
         <button class="settings-tab" data-tab="prompts">AI Prompts</button>
+        <button class="settings-tab" data-tab="templates">Templates</button>
         <button class="settings-tab" data-tab="apikeys">API Keys</button>
     </div>
     
@@ -203,6 +204,17 @@
     </div>
     
     <!-- API Keys Tab -->
+    
+    <!-- Templates Tab -->
+    <div class="settings-content" id="tab-templates">
+        <h2>Project Templates</h2>
+        <p>Manage your saved project templates.</p>
+        
+        <div id="templates-list" style="margin-top: 1rem;">
+            <div class="loading-spinner">Loading templates...</div>
+        </div>
+    </div>
+
     <div class="settings-content" id="tab-apikeys">
         <div class="settings-card">
             <h2>API Keys</h2>
@@ -667,5 +679,58 @@ async function deleteStyle(id) {
 
 // Load styles when page loads
 document.addEventListener("DOMContentLoaded", loadCoverStyles);
+
+// Templates Management
+async function loadSettingsTemplates() {
+    try {
+        const result = await api.get('/api/templates');
+        if (result.ok && result.data) {
+            renderSettingsTemplates(result.data);
+        }
+    } catch (error) {
+        console.error('Failed to load templates', error);
+    }
+}
+
+function renderSettingsTemplates(templates) {
+    const container = document.getElementById('templates-list');
+    if (!templates || templates.length === 0) {
+        container.innerHTML = '<p style="color: #888;">No templates yet. Save a project as template from the project page.</p>';
+        return;
+    }
+    
+    container.innerHTML = templates.map(t => `
+        <div class="style-item">
+            <span class="style-emoji">📋</span>
+            <span class="style-name">${t.name}</span>
+            <span class="style-key">${t.genre_tone || 'No genre'}</span>
+            <span class="style-key">${(t.characters_json || []).length} chars</span>
+            <button class="btn-icon" onclick="deleteTemplate('${t.id}')" title="Delete">🗑️</button>
+        </div>
+    `).join('');
+}
+
+async function deleteTemplate(id) {
+    if (!confirm('Delete this template?')) return;
+    
+    try {
+        const result = await api.delete(`/api/templates/${id}`);
+        if (result.ok) {
+            showToast('Template deleted', 'success');
+            loadSettingsTemplates();
+        }
+    } catch (error) {
+        showError(error, 'Delete template');
+    }
+}
+
+// Load templates when tab is clicked
+document.addEventListener('DOMContentLoaded', () => {
+    const templatesTab = document.querySelector('[data-tab="templates"]');
+    if (templatesTab) {
+        templatesTab.addEventListener('click', loadSettingsTemplates);
+    }
+});
+
 </script>
 {% endblock %}

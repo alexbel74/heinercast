@@ -26,6 +26,7 @@ from app.api.voices import router as voices_router
 from app.api.generation import router as generation_router
 from app.api.files import router as files_router
 from app.api.settings import router as settings_router
+from app.api.templates import router as templates_router
 from app.api.pages import router as pages_router
 
 settings = get_settings()
@@ -159,6 +160,7 @@ app.include_router(cover_styles_router)
 app.include_router(generation_router, prefix="/api/generation", tags=["Generation"])
 app.include_router(files_router, prefix="/api/files", tags=["Files"])
 app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
+app.include_router(templates_router)
 
 # Web pages
 app.include_router(pages_router, tags=["Pages"])

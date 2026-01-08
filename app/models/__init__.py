@@ -18,3 +18,4 @@ __all__ = [
     "APIKey"
 ]
 from app.models.cover_style import CoverStyle
+from app.models.project_template import ProjectTemplate

@@ -32,6 +32,7 @@
     <div class="page-header">
         <a href="/dashboard" class="back-link">← Back to Projects</a>
         <div class="page-actions">
+            <button class="btn btn-outline" onclick="saveAsTemplate()">💾 Save Template</button>
             <button class="btn btn-outline" onclick="exportProject()">📦 Export</button>
             <button class="btn btn-outline" onclick="showEditProjectModal()">Edit</button>
             <button class="btn btn-danger-outline" onclick="confirmDeleteProject()">Delete</button>
@@ -463,6 +464,38 @@ async function createEpisode(event) {
     }
 }
 
+
+async function saveAsTemplate() {
+    const name = prompt("Template name:", project.title + " Template");
+    if (!name) return;
+    
+    // Prepare characters for template
+    const characters = (project.characters || []).map(c => ({
+        role: c.role,
+        character_name: c.character_name,
+        voice_id: c.voice_id
+    }));
+    
+    try {
+        const result = await api.post('/api/templates', {
+            name: name,
+            genre_tone: project.genre_tone,
+            musical_atmosphere: project.musical_atmosphere,
+            include_sound_effects: project.include_sound_effects,
+            include_background_music: project.include_background_music,
+            target_duration_minutes: 10,
+            cover_style: null,
+            characters_json: characters
+        });
+        if (result.ok) {
+            showToast("Template saved!", "success");
+        } else {
+            showError(result.error || "Failed to save template");
+        }
+    } catch (error) {
+        showError(error, "Save template");
+    }
+}
 
 function exportProject() {
     showToast("Preparing ZIP archive...", "info");
